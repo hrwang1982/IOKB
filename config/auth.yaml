@@ -1,0 +1,206 @@
+# 认证与授权模块配置文件
+# 此文件包含认证相关的可配置参数
+
+# ==================== JWT配置 ====================
+jwt:
+  algorithm: "HS256"              # 加密算法
+  access_token_expire_minutes: 30 # 访问令牌过期时间（分钟）
+  refresh_token_expire_days: 7    # 刷新令牌过期时间（天）
+
+# ==================== 密码策略 ====================
+password:
+  min_length: 8                   # 最小长度
+  require_uppercase: true         # 需要大写字母
+  require_lowercase: true         # 需要小写字母
+  require_digit: true             # 需要数字
+  require_special: false          # 需要特殊字符
+  special_chars: "!@#$%^&*()_+-=" # 允许的特殊字符
+
+# ==================== LDAP配置 ====================
+ldap:
+  enabled: false                  # 是否启用LDAP
+  user_filter: "(uid={username})" # 用户搜索过滤器
+  group_filter: "(member={dn})"   # 组搜索过滤器
+  sync_interval_minutes: 60       # 同步间隔（分钟）
+  auto_create_user: true          # 自动创建用户
+  default_role: "viewer"          # 新用户默认角色
+  
+  # LDAP组到角色的映射
+  group_role_mapping:
+    IT-Admins: admin
+    KB-Managers: kb_admin
+    CMDB-Managers: cmdb_admin
+    Alert-Operators: alert_operator
+    IT-Users: viewer
+
+# ==================== SSO配置 ====================
+sso:
+  enabled: false                  # 是否启用SSO
+  provider: "oauth2"              # 提供者类型: oauth2, saml, cas
+  auto_create_user: true          # 自动创建用户
+  default_role: "viewer"          # 新用户默认角色
+  
+  # 用户属性映射
+  attribute_mapping:
+    username: "preferred_username"
+    email: "email"
+    display_name: "name"
+    groups: "groups"
+
+# ==================== 会话配置 ====================
+session:
+  max_sessions_per_user: 5        # 每用户最大会话数
+  idle_timeout_minutes: 30        # 空闲超时（分钟）
+  absolute_timeout_hours: 24      # 绝对超时（小时）
+
+# ==================== 安全配置 ====================
+security:
+  login_attempts_limit: 5         # 登录尝试限制
+  lockout_duration_minutes: 15    # 锁定时长（分钟）
+  require_2fa: false              # 是否要求双因素认证
+
+# ==================== 预定义权限 ====================
+# 可以在这里添加自定义权限
+permissions:
+  # 知识库权限
+  - code: "kb:read"
+    name: "知识库查看"
+    module: "knowledge"
+    description: "查看知识库文档"
+  - code: "kb:create"
+    name: "知识库创建"
+    module: "knowledge"
+    description: "创建知识库文档"
+  - code: "kb:update"
+    name: "知识库编辑"
+    module: "knowledge"
+    description: "编辑知识库文档"
+  - code: "kb:delete"
+    name: "知识库删除"
+    module: "knowledge"
+    description: "删除知识库文档"
+  - code: "kb:admin"
+    name: "知识库管理"
+    module: "knowledge"
+    description: "管理知识库设置"
+    
+  # CMDB权限
+  - code: "cmdb:read"
+    name: "CMDB查看"
+    module: "cmdb"
+    description: "查看配置项"
+  - code: "cmdb:create"
+    name: "CMDB创建"
+    module: "cmdb"
+    description: "创建配置项"
+  - code: "cmdb:update"
+    name: "CMDB编辑"
+    module: "cmdb"
+    description: "编辑配置项"
+  - code: "cmdb:delete"
+    name: "CMDB删除"
+    module: "cmdb"
+    description: "删除配置项"
+  - code: "cmdb:admin"
+    name: "CMDB管理"
+    module: "cmdb"
+    description: "管理CMDB设置"
+    
+  # 告警权限
+  - code: "alert:read"
+    name: "告警查看"
+    module: "alert"
+    description: "查看告警"
+  - code: "alert:ack"
+    name: "告警确认"
+    module: "alert"
+    description: "确认告警"
+  - code: "alert:resolve"
+    name: "告警处理"
+    module: "alert"
+    description: "处理告警"
+  - code: "alert:admin"
+    name: "告警管理"
+    module: "alert"
+    description: "管理告警设置"
+    
+  # 用户权限
+  - code: "user:read"
+    name: "用户查看"
+    module: "user"
+    description: "查看用户列表"
+  - code: "user:create"
+    name: "用户创建"
+    module: "user"
+    description: "创建用户"
+  - code: "user:update"
+    name: "用户编辑"
+    module: "user"
+    description: "编辑用户"
+  - code: "user:delete"
+    name: "用户删除"
+    module: "user"
+    description: "删除用户"
+  - code: "user:admin"
+    name: "用户管理"
+    module: "user"
+    description: "管理用户权限"
+    
+  # 系统权限
+  - code: "system:config"
+    name: "系统配置"
+    module: "system"
+    description: "修改系统配置"
+  - code: "system:audit"
+    name: "审计日志"
+    module: "system"
+    description: "查看审计日志"
+  - code: "system:admin"
+    name: "系统管理"
+    module: "system"
+    description: "系统管理员权限"
+
+# ==================== 预定义角色 ====================
+roles:
+  - code: "admin"
+    name: "系统管理员"
+    description: "拥有所有权限"
+    permissions: ["*"]  # 所有权限
+    
+  - code: "kb_admin"
+    name: "知识库管理员"
+    description: "管理知识库"
+    permissions:
+      - "kb:read"
+      - "kb:create"
+      - "kb:update"
+      - "kb:delete"
+      - "kb:admin"
+      
+  - code: "cmdb_admin"
+    name: "CMDB管理员"
+    description: "管理CMDB配置"
+    permissions:
+      - "cmdb:read"
+      - "cmdb:create"
+      - "cmdb:update"
+      - "cmdb:delete"
+      - "cmdb:admin"
+      
+  - code: "alert_operator"
+    name: "告警运维"
+    description: "处理告警"
+    permissions:
+      - "alert:read"
+      - "alert:ack"
+      - "alert:resolve"
+      - "kb:read"
+      - "cmdb:read"
+      
+  - code: "viewer"
+    name: "只读用户"
+    description: "只能查看"
+    permissions:
+      - "kb:read"
+      - "cmdb:read"
+      - "alert:read"

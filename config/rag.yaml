@@ -1,0 +1,122 @@
+# RAG知识库模块配置文件
+# 此文件包含RAG相关的可配置参数
+
+# ==================== 文档解析配置 ====================
+parser:
+  max_file_size_mb: 50            # 最大文件大小（MB）
+  supported_extensions:           # 支持的文件扩展名
+    - .pdf
+    - .doc
+    - .docx
+    - .xls
+    - .xlsx
+    - .md
+    - .txt
+    - .html
+    - .json
+    - .yaml
+    - .xml
+
+# ==================== 文本分片配置 ====================
+splitter:
+  default_type: "recursive"       # 默认分片类型: recursive, markdown, sentence
+  chunk_size: 500                 # 分片大小（字符数）
+  chunk_overlap: 100              # 分片重叠（字符数）
+  min_chunk_size: 50              # 最小分片大小
+  separators:                     # 分隔符列表（递归分片用）
+    - "\n\n"
+    - "\n"
+    - "。"
+    - "！"
+    - "？"
+    - "."
+    - "!"
+    - "?"
+    - " "
+    - ""
+
+# ==================== 向量化配置 ====================
+embedder:
+  batch_size: 32                  # 批量处理大小
+  max_retries: 3                  # 最大重试次数
+  retry_delay_seconds: 1          # 重试延迟（秒）
+  normalize: true                 # 是否归一化向量
+
+# ==================== 检索配置 ====================
+retriever:
+  default_top_k: 5                # 默认返回数量
+  max_top_k: 50                   # 最大返回数量
+  min_score_threshold: 0.5        # 最小相关度阈值
+  use_hybrid_search: true         # 是否使用混合检索
+  vector_weight: 0.7              # 混合检索中向量权重
+  keyword_weight: 0.3             # 混合检索中关键词权重
+  rrf_k: 60                       # RRF融合参数
+
+# ==================== 重排序配置 ====================
+reranker:
+  enabled: true                   # 是否启用重排序
+  top_n: 5                        # 重排序后返回数量
+  min_score: 0.3                  # 重排序最小分数
+
+# ==================== OCR配置 ====================
+ocr:
+  languages:                      # OCR语言
+    - ch
+    - en
+  use_angle_cls: true             # 是否使用角度分类
+  show_log: false                 # 是否显示日志
+
+# ==================== 多模态配置 ====================
+multimodal:
+  video_frames_per_second: 0.5    # 视频每秒提取帧数
+  max_video_frames: 10            # 最大提取帧数
+  image_max_size: 2048            # 图片最大尺寸
+
+# ==================== RAG问答配置 ====================
+qa:
+  use_rerank: true                # 是否使用重排序
+  context_max_tokens: 4000        # 上下文最大token数
+  stream_enabled: true            # 是否支持流式输出
+
+# ==================== Prompt模板配置 ====================
+prompts:
+  # RAG系统提示词
+  system_prompt: |
+    你是一个专业的知识库问答助手。请根据提供的上下文信息回答用户的问题。
+    
+    规则：
+    1. 只根据上下文信息回答，不要编造信息
+    2. 如果上下文信息不足以回答问题，请明确告知用户
+    3. 回答要准确、简洁、专业
+    4. 如果引用了具体来源，请标注出处
+
+  # RAG用户提示词模板
+  # 可用变量: {context}, {question}
+  user_prompt: |
+    请根据以下上下文信息回答问题。
+
+    ## 上下文信息
+    {context}
+
+    ## 用户问题
+    {question}
+
+    请提供准确、简洁的回答：
+
+  # 无上下文时的回答模板
+  no_context_prompt: |
+    抱歉，在知识库中未找到与您问题相关的信息。
+    
+    您的问题是：{question}
+    
+    建议：
+    1. 尝试换一种方式描述问题
+    2. 检查是否有相关文档已上传到知识库
+    3. 联系管理员确认知识库内容
+
+# ==================== 知识库索引配置 ====================
+index:
+  name_prefix: "kb"               # 索引名称前缀
+  shards: 1                       # 分片数
+  replicas: 0                     # 副本数
+  refresh_interval: "1s"          # 刷新间隔

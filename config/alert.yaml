@@ -1,0 +1,145 @@
+# 告警分析模块配置文件
+# 此文件包含告警分析相关的可配置参数
+
+# ==================== 告警上下文丰富配置 ====================
+enricher:
+  time_window_minutes: 30        # 关联数据的时间窗口（分钟）
+  max_related_alerts: 10         # 最大相关告警数量
+  max_logs: 50                   # 最大相关日志数量
+  performance_metrics:           # 要查询的性能指标
+    - cpu_usage
+    - memory_usage
+    - disk_usage
+    - network_io
+    - load_average
+
+# ==================== 告警关联配置 ====================
+correlator:
+  correlation_window_minutes: 10 # 关联时间窗口（分钟）
+  min_correlation_score: 0.5     # 最小关联度阈值
+  max_correlated_alerts: 100     # 最大关联告警数量
+
+# ==================== LLM分析配置 ====================
+llm_analyzer:
+  max_related_alerts: 5          # 分析时使用的最大相关告警数
+  max_logs: 20                   # 分析时使用的最大日志数
+  temperature: 0.3               # LLM温度（0-1，越低越确定）
+  max_tokens: 2048               # 最大输出token数
+
+# ==================== 方案推荐配置 ====================
+recommender:
+  max_recommendations: 5         # 最大推荐数量
+  min_relevance_score: 0.5       # 最小相关度阈值
+  use_rag_answer: true           # 是否使用RAG生成综合回答
+
+# ==================== 规则匹配配置 ====================
+rule_matcher:
+  # 告警关键词 -> 解决方案类别映射
+  keyword_mappings:
+    cpu:
+      - 性能优化
+      - 资源扩容
+    内存:
+      - 内存优化
+      - 内存泄漏排查
+    磁盘:
+      - 存储扩容
+      - 磁盘清理
+    网络:
+      - 网络排查
+      - 连接优化
+    超时:
+      - 性能优化
+      - 连接池配置
+    连接失败:
+      - 网络排查
+      - 服务恢复
+    服务异常:
+      - 服务重启
+      - 日志排查
+    宕机:
+      - 紧急恢复
+      - 故障转移
+    数据库:
+      - 数据库优化
+      - 连接池调整
+    OOM:
+      - 内存泄漏排查
+      - JVM调优
+
+# ==================== Prompt模板配置 ====================
+prompts:
+  # 系统提示词
+  system_prompt: |
+    你是一位资深的IT运维专家，专门负责分析系统告警、定位问题根因并提供解决建议。
+
+    你的职责是：
+    1. 分析告警信息，理解问题本质
+    2. 结合关联的性能数据、日志信息进行综合判断
+    3. 找出可能的问题根因
+    4. 提供切实可行的解决方案
+
+    请始终保持专业、准确、简洁。
+
+  # 用户提示词模板（支持变量替换）
+  # 可用变量: {alert_id}, {level}, {title}, {content}, {source}, {alert_time}, 
+  #          {ci_identifier}, {ci_info}, {related_count}, {related_alerts}, 
+  #          {performance_data}, {log_count}, {related_logs}
+  user_prompt: |
+    请分析以下告警及其上下文信息：
+
+    ## 当前告警
+    - **告警ID**: {alert_id}
+    - **告警级别**: {level}
+    - **告警标题**: {title}
+    - **告警内容**: {content}
+    - **告警来源**: {source}
+    - **告警时间**: {alert_time}
+    - **配置项**: {ci_identifier}
+
+    ## 关联的配置项信息
+    {ci_info}
+
+    ## 近期相关告警（{related_count}条）
+    {related_alerts}
+
+    ## 相关性能数据
+    {performance_data}
+
+    ## 相关错误日志（{log_count}条）
+    {related_logs}
+
+    ---
+
+    请提供以下分析结果：
+    1. **问题概述**: 简要描述当前问题
+    2. **根因分析**: 可能的问题根因（优先级排序）
+    3. **影响范围**: 评估此问题可能的影响范围
+    4. **解决建议**: 具体的解决步骤
+    5. **预防措施**: 如何避免此类问题再次发生
+
+  # 快速分析提示词（用于紧急告警）
+  quick_analysis_prompt: |
+    紧急告警分析：
+    告警: {title}
+    内容: {content}
+    配置项: {ci_identifier}
+    
+    请快速给出：1.可能原因 2.紧急处理建议
+
+# ==================== 告警级别配置 ====================
+alert_levels:
+  critical:
+    priority: 1
+    default_categories:
+      - 紧急处理
+      - 故障恢复
+  warning:
+    priority: 2
+    default_categories:
+      - 常规排查
+      - 性能优化
+  info:
+    priority: 3
+    default_categories:
+      - 信息确认

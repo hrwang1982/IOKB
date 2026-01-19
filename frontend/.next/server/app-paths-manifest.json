@@ -1,0 +1,7 @@
+{
+  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
+  "/(dashboard)/admin/users/page": "app/(dashboard)/admin/users/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
+  "/(dashboard)/settings/page": "app/(dashboard)/settings/page.js"
+}

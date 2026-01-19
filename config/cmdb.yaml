@@ -1,0 +1,91 @@
+# CMDB模块配置文件
+# 此文件包含CMDB模块的所有可配置参数
+
+# ==================== 告警索引配置 ====================
+alert_index:
+  name: "alerts"                    # 索引名称
+  shards: 2                         # 分片数量
+  replicas: 1                       # 副本数量
+  retention_days: 90                # 数据保留天数
+  refresh_interval: "5s"            # 刷新间隔
+
+# ==================== 日志索引配置 ====================
+log_index:
+  name: "logs"                      # 索引名称
+  shards: 3                         # 分片数量
+  replicas: 1                       # 副本数量
+  retention_days: 30                # 数据保留天数
+  refresh_interval: "10s"           # 刷新间隔
+
+# ==================== InfluxDB配置 ====================
+influxdb:
+  measurement: "ci_metrics"         # 指标表名
+  batch_size: 1000                  # 批量写入大小
+  flush_interval: 10                # 刷新间隔（秒）
+
+# ==================== Kafka消费者配置 ====================
+kafka:
+  batch_size: 100                   # 批量处理大小
+  poll_timeout_ms: 1000             # 轮询超时（毫秒）
+  auto_commit: true                 # 自动提交
+
+# ==================== Socket服务配置 ====================
+socket:
+  buffer_size: 4096                 # 缓冲区大小
+  max_connections: 1000             # 最大连接数
+  timeout_seconds: 30               # 连接超时（秒）
+
+# ==================== 数据同步配置 ====================
+sync:
+  default_interval_minutes: 60      # 默认同步间隔（分钟）
+  batch_size: 500                   # 批量处理大小
+  retry_times: 3                    # 重试次数
+  retry_delay_seconds: 5            # 重试延迟（秒）
+
+# ==================== 预置CI类型配置 ====================
+# 可以在这里禁用或调整预置类型
+ci_types:
+  enabled:
+    - storage
+    - network
+    - server
+    - os_linux
+    - os_windows
+    - vmware_vcenter
+    - vmware_esxi
+    - vmware_vm
+    - k8s_cluster
+    - k8s_node
+    - k8s_pod
+    - docker_host
+    - docker_container
+    - middleware
+    - database
+    - application
+
+# ==================== 关系类型配置 ====================
+relationship_types:
+  - code: "depends_on"
+    name: "依赖"
+    description: "A依赖B运行"
+  - code: "contains"
+    name: "包含"
+    description: "A包含B"
+  - code: "connects_to"
+    name: "连接"
+    description: "A连接到B"
+  - code: "runs_on"
+    name: "运行于"
+    description: "A运行于B之上"
+  - code: "deployed_on"
+    name: "部署于"
+    description: "A部署在B上"
+  - code: "belongs_to"
+    name: "属于"
+    description: "A属于B"
+
+# ==================== 拓扑配置 ====================
+topology:
+  max_depth: 5                      # 最大遍历深度
+  max_nodes: 500                    # 最大节点数
+  default_layout: "dagre"           # 默认布局算法
