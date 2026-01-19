@@ -1,6 +1,6 @@
-# 智能运维知识库系统 (SKB)
+# 智能运维知识库系统 (IOKB)
 
-Smart Knowledge Base - 面向金融行业运维领域的智能化解决方案
+Intelligent Operations Knowledge Base - 面向金融行业运维领域的智能化解决方案
 
 ## 功能特性
 
