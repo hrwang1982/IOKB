@@ -58,13 +58,13 @@ class BaseLLM(ABC):
 
 
 class AliyunLLM(BaseLLM):
-    """阿里云通义千问"""
+    """阿里云通义千问（OpenAI兼容格式）"""
     
     def __init__(
         self,
         api_key: str = None,
         model_name: str = "qwen-turbo",
-        api_base: str = "https://dashscope.aliyuncs.com/api/v1",
+        api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ):
         self.api_key = api_key or settings.llm_api_key
         self.model_name = model_name
@@ -77,44 +77,33 @@ class AliyunLLM(BaseLLM):
         max_tokens: int = 4096,
         **kwargs,
     ) -> LLMResponse:
-        """对话"""
+        """对话（使用OpenAI兼容格式）"""
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
-                f"{self.api_base}/services/aigc/text-generation/generation",
+                f"{self.api_base}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
                     "model": self.model_name,
-                    "input": {
-                        "messages": [{"role": m.role, "content": m.content} for m in messages],
-                    },
-                    "parameters": {
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "result_format": "message",
-                    },
+                    "messages": [{"role": m.role, "content": m.content} for m in messages],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
                 },
             )
             response.raise_for_status()
             data = response.json()
         
-        output = data.get("output", {})
+        choice = data.get("choices", [{}])[0]
         usage = data.get("usage", {})
         
-        content = ""
-        if "choices" in output:
-            content = output["choices"][0].get("message", {}).get("content", "")
-        elif "text" in output:
-            content = output["text"]
-        
         return LLMResponse(
-            content=content,
+            content=choice.get("message", {}).get("content", ""),
             model=self.model_name,
-            input_tokens=usage.get("input_tokens", 0),
-            output_tokens=usage.get("output_tokens", 0),
-            finish_reason=output.get("finish_reason", ""),
+            input_tokens=usage.get("prompt_tokens", 0),
+            output_tokens=usage.get("completion_tokens", 0),
+            finish_reason=choice.get("finish_reason", ""),
         )
     
     async def chat_stream(
@@ -124,37 +113,30 @@ class AliyunLLM(BaseLLM):
         max_tokens: int = 4096,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """流式对话"""
+        """流式对话（使用OpenAI兼容格式）"""
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
-                f"{self.api_base}/services/aigc/text-generation/generation",
+                f"{self.api_base}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
-                    "X-DashScope-SSE": "enable",
                 },
                 json={
                     "model": self.model_name,
-                    "input": {
-                        "messages": [{"role": m.role, "content": m.content} for m in messages],
-                    },
-                    "parameters": {
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "result_format": "message",
-                        "incremental_output": True,
-                    },
+                    "messages": [{"role": m.role, "content": m.content} for m in messages],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
                 },
             ) as response:
                 async for line in response.aiter_lines():
-                    if line.startswith("data:"):
+                    if line.startswith("data:") and line != "data: [DONE]":
                         data = json.loads(line[5:])
-                        output = data.get("output", {})
-                        if "choices" in output:
-                            content = output["choices"][0].get("message", {}).get("content", "")
-                            if content:
-                                yield content
+                        delta = data.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
 
 
 class OpenAILLM(BaseLLM):
@@ -341,7 +323,7 @@ class LLMService:
             self._llm = AliyunLLM(
                 api_key=settings.llm_api_key,
                 model_name=settings.llm_model_name,
-                api_base=settings.llm_api_base or "https://dashscope.aliyuncs.com/api/v1",
+                api_base=settings.llm_api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
             )
         elif provider == "openai":
             self._llm = OpenAILLM(

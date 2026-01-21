@@ -13,6 +13,7 @@ services:
       - MYSQL_HOST=mysql
       - MYSQL_PORT=3306
       - ES_HOST=elasticsearch
+      - ES_PASSWORD=
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - REDIS_HOST=redis
       - INFLUXDB_URL=http://influxdb:8086

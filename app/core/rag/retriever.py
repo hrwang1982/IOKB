@@ -41,9 +41,11 @@ class ElasticsearchRetriever:
     async def get_client(self) -> AsyncElasticsearch:
         """获取ES客户端"""
         if self._client is None:
+            use_auth = bool(settings.es_password)
+            logger.info(f"初始化ES客户端: hosts={self.hosts}, use_auth={use_auth}")
             self._client = AsyncElasticsearch(
                 hosts=self.hosts,
-                basic_auth=(settings.es_user, settings.es_password) if settings.es_password else None,
+                basic_auth=(settings.es_user, settings.es_password) if use_auth else None,
             )
         return self._client
     
@@ -63,9 +65,16 @@ class ElasticsearchRetriever:
         client = await self.get_client()
         
         # 检查索引是否存在
-        if await client.indices.exists(index=index_name):
-            logger.info(f"索引已存在: {index_name}")
-            return True
+        try:
+            exists = await client.indices.exists(index=index_name)
+            if exists:
+                logger.info(f"索引已存在: {index_name}")
+                return True
+        except Exception as e:
+            logger.warning(f"检查索引存在时出错: {type(e).__name__}: {e}")
+            if hasattr(e, 'body'):
+                logger.warning(f"详情: {e.body}")
+            # 假设不存在，继续创建
         
         # 创建索引
         mappings = {
@@ -121,13 +130,20 @@ class ElasticsearchRetriever:
             mappings["properties"]["content"]["search_analyzer"] = "standard"
             del settings_body["analysis"]
             
-            await client.indices.create(
-                index=index_name,
-                mappings=mappings,
-                settings=settings_body,
-            )
-            logger.info(f"索引创建成功(标准分词器): {index_name}")
-            return True
+            try:
+                await client.indices.create(
+                    index=index_name,
+                    mappings=mappings,
+                    settings=settings_body,
+                )
+                logger.info(f"索引创建成功(标准分词器): {index_name}")
+                return True
+            except Exception as e2:
+                logger.error(f"索引创建失败: {type(e2).__name__}: {e2}")
+                # 尝试获取更详细的错误信息
+                if hasattr(e2, 'body'):
+                    logger.error(f"ES错误详情: {e2.body}")
+                raise
     
     async def delete_index(self, kb_id: int) -> bool:
         """删除知识库索引"""
@@ -178,9 +194,12 @@ class ElasticsearchRetriever:
         documents: List[Dict[str, Any]],
     ) -> int:
         """批量索引文档"""
+        from datetime import datetime
+        
         index_name = self._get_index_name(kb_id)
         client = await self.get_client()
         
+        now = datetime.utcnow().isoformat()
         operations = []
         for doc in documents:
             operations.append({"index": {"_index": index_name, "_id": doc["id"]}})
@@ -191,12 +210,18 @@ class ElasticsearchRetriever:
                 "chunk_index": doc["chunk_index"],
                 "kb_id": kb_id,
                 "metadata": doc.get("metadata", {}),
-                "created_at": "now",
+                "created_at": now,
             })
         
         result = await client.bulk(operations=operations)
         
-        success_count = sum(1 for item in result["items"] if item["index"]["status"] in [200, 201])
+        success_count = 0
+        for item in result["items"]:
+            if item["index"]["status"] in [200, 201]:
+                success_count += 1
+            else:
+                logger.error(f"批量索引项失败: {item['index']}")
+        
         logger.info(f"批量索引完成: {success_count}/{len(documents)}")
         
         return success_count

@@ -109,15 +109,18 @@ class DocumentProcessor:
                 chunk_texts = [c.content for c in chunks]
                 embeddings = await embedding_service.embed_batch(chunk_texts)
                 logger.info(f"向量化完成, 共 {len(embeddings)} 个向量")
+                if embeddings:
+                    logger.info(f"向量维度: {len(embeddings[0].vector)}")
                 
                 # 4. 确保ES索引存在
+                logger.info(f"创建/检查ES索引: kb_id={kb_id}")
                 await retriever.create_index(kb_id)
                 
                 # 5. 批量索引到ES
                 es_documents = []
                 for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
                     es_documents.append({
-                        "doc_id": f"{doc_id}_{i}",
+                        "id": f"{doc_id}_{i}",
                         "content": chunk.content,
                         "vector": emb.vector,
                         "document_id": doc_id,
