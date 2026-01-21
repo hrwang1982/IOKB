@@ -43,13 +43,13 @@ class BaseEmbedder(ABC):
 
 
 class AliyunEmbedder(BaseEmbedder):
-    """阿里云Embedding服务"""
+    """阿里云Embedding服务（OpenAI兼容格式）"""
     
     def __init__(
         self,
         api_key: str = None,
         model_name: str = "text-embedding-v3",
-        api_base: str = "https://dashscope.aliyuncs.com/api/v1",
+        api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1",
     ):
         self.api_key = api_key or settings.embedding_api_key
         self.model_name = model_name
@@ -66,35 +66,33 @@ class AliyunEmbedder(BaseEmbedder):
         return results[0]
     
     async def embed_batch(self, texts: List[str]) -> List[EmbeddingResult]:
-        """批量向量化"""
+        """批量向量化（使用OpenAI兼容格式）"""
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.api_base}/services/embeddings/text-embedding/text-embedding",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model_name,
-                    "input": {
-                        "texts": texts,
+            try:
+                response = await client.post(
+                    f"{self.api_base}/embeddings",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
                     },
-                    "parameters": {
-                        "text_type": "document",
+                    json={
+                        "model": self.model_name,
+                        "input": texts,
                     },
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
+                )
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                # 记录详细错误信息
+                error_body = e.response.text
+                logger.error(f"Embedding API错误: status={e.response.status_code}, body={error_body}")
+                raise
         
         results = []
-        embeddings = data.get("output", {}).get("embeddings", [])
-        usage = data.get("usage", {})
-        
-        for emb in embeddings:
+        for item in data.get("data", []):
             results.append(EmbeddingResult(
-                vector=emb.get("embedding", []),
-                token_count=usage.get("total_tokens", 0) // len(texts),
+                vector=item.get("embedding", []),
+                token_count=data.get("usage", {}).get("total_tokens", 0) // len(texts),
                 model=self.model_name,
             ))
         
@@ -228,7 +226,7 @@ class EmbeddingService:
             self._embedder = AliyunEmbedder(
                 api_key=settings.embedding_api_key,
                 model_name=settings.embedding_model_name,
-                api_base=settings.embedding_api_base or "https://dashscope.aliyuncs.com/api/v1",
+                api_base=settings.embedding_api_base or "https://dashscope.aliyuncs.com/compatible-mode/v1",
             )
         elif provider == "openai":
             self._embedder = OpenAIEmbedder(

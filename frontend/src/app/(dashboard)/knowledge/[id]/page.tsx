@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
     ArrowLeft,
     ChevronRight,
@@ -9,10 +10,10 @@ import {
     Eye,
     File,
     FileImage,
-    FilePdf,
-    FileSpreadsheet,
     FileText,
+    FileSpreadsheet,
     Filter,
+    Loader2,
     MoreVertical,
     Plus,
     RefreshCw,
@@ -20,70 +21,22 @@ import {
     Settings,
     Trash2,
     Upload,
+    X,
+    AlertCircle,
 } from 'lucide-react';
-
-// 模拟知识库详情
-const kbDetail = {
-    id: 1,
-    name: '运维知识库',
-    description: '包含日常运维操作手册、故障处理方案、最佳实践等文档',
-    documentCount: 156,
-    status: 'active',
-    createdAt: '2026-01-01 10:00:00',
-    updatedAt: '2026-01-18 15:30:00',
-};
-
-// 模拟文档列表
-const mockDocuments = [
-    {
-        id: 1,
-        filename: 'CPU使用率过高处理方案.pdf',
-        fileType: 'pdf',
-        fileSize: 1024 * 256,
-        status: 'completed',
-        chunkCount: 12,
-        createdAt: '2026-01-18 14:30:00',
-    },
-    {
-        id: 2,
-        filename: 'Linux服务器性能优化指南.docx',
-        fileType: 'docx',
-        fileSize: 1024 * 512,
-        status: 'completed',
-        chunkCount: 28,
-        createdAt: '2026-01-17 10:20:00',
-    },
-    {
-        id: 3,
-        filename: '数据库备份恢复手册.md',
-        fileType: 'md',
-        fileSize: 1024 * 64,
-        status: 'completed',
-        chunkCount: 8,
-        createdAt: '2026-01-16 18:45:00',
-    },
-    {
-        id: 4,
-        filename: '网络故障排查流程.xlsx',
-        fileType: 'xlsx',
-        fileSize: 1024 * 128,
-        status: 'processing',
-        chunkCount: 0,
-        createdAt: '2026-01-18 16:00:00',
-    },
-    {
-        id: 5,
-        filename: '服务器配置截图.png',
-        fileType: 'png',
-        fileSize: 1024 * 1024 * 2,
-        status: 'completed',
-        chunkCount: 1,
-        createdAt: '2026-01-15 09:00:00',
-    },
-];
+import {
+    getKnowledgeBase,
+    getDocuments,
+    uploadDocuments,
+    deleteDocument,
+    reprocessDocument,
+    getDocumentDownloadUrl,
+    type KnowledgeBase,
+    type Document,
+} from '@/lib/api';
 
 const fileIcons: Record<string, typeof File> = {
-    pdf: FilePdf,
+    pdf: File,
     docx: FileText,
     doc: FileText,
     md: FileText,
@@ -108,13 +61,217 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function KnowledgeDetailPage({ params }: { params: { id: string } }) {
+function formatDate(dateString: string): string {
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('zh-CN');
+    } catch {
+        return dateString;
+    }
+}
+
+export default function KnowledgeDetailPage() {
+    const params = useParams();
+    const kbId = params.id as string;
+
+    // 知识库和文档状态
+    const [kbDetail, setKbDetail] = useState<KnowledgeBase | null>(null);
+    const [documents, setDocuments] = useState<Document[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // 搜索和模态框状态
     const [searchQuery, setSearchQuery] = useState('');
     const [showUploadModal, setShowUploadModal] = useState(false);
 
-    const filteredDocs = mockDocuments.filter((doc) =>
+    // 上传状态
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // 删除确认对话框状态
+    const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; docId: number | null; filename: string }>({
+        show: false,
+        docId: null,
+        filename: '',
+    });
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isReprocessing, setIsReprocessing] = useState<number | null>(null);
+
+    // 加载知识库详情和文档列表
+    useEffect(() => {
+        if (kbId) {
+            loadData();
+        }
+    }, [kbId]);
+
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const [kb, docs] = await Promise.all([
+                getKnowledgeBase(parseInt(kbId)),
+                getDocuments(parseInt(kbId)),
+            ]);
+
+            setKbDetail(kb);
+            setDocuments(docs.items);
+        } catch (err) {
+            console.error('Failed to load data:', err);
+            setError(err instanceof Error ? err.message : '加载失败');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // 过滤文档
+    const filteredDocs = documents.filter((doc) =>
         doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    // 处理文件选择
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const newFiles = Array.from(e.target.files);
+            setSelectedFiles(prev => [...prev, ...newFiles]);
+        }
+    };
+
+    // 移除选中的文件
+    const removeFile = (index: number) => {
+        setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // 处理文件上传
+    const handleUpload = async () => {
+        if (selectedFiles.length === 0) {
+            setUploadError('请先选择要上传的文件');
+            return;
+        }
+
+        setIsUploading(true);
+        setUploadError(null);
+
+        try {
+            // 创建 FileList 模拟对象
+            const dataTransfer = new DataTransfer();
+            selectedFiles.forEach(file => dataTransfer.items.add(file));
+
+            await uploadDocuments(parseInt(kbId), dataTransfer.files);
+
+            // 上传成功，重新加载文档列表
+            await loadData();
+
+            // 关闭模态框，清空选中文件
+            setShowUploadModal(false);
+            setSelectedFiles([]);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            setUploadError(err instanceof Error ? err.message : '上传失败');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    // 关闭上传模态框
+    const handleCloseModal = () => {
+        setShowUploadModal(false);
+        setSelectedFiles([]);
+        setUploadError(null);
+    };
+
+    // 处理拖放
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (e.dataTransfer.files) {
+            const newFiles = Array.from(e.dataTransfer.files);
+            setSelectedFiles(prev => [...prev, ...newFiles]);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+    };
+
+    // 查看文档详情
+    const handleViewDocument = (docId: number) => {
+        window.location.href = `/knowledge/${kbId}/doc/${docId}`;
+    };
+
+    // 下载文档
+    const handleDownloadDocument = (docId: number) => {
+        const url = getDocumentDownloadUrl(parseInt(kbId), docId);
+        window.open(url, '_blank');
+    };
+
+    // 重新处理文档
+    const handleReprocessDocument = async (docId: number) => {
+        if (isReprocessing === docId) return;
+
+        setIsReprocessing(docId);
+        try {
+            await reprocessDocument(parseInt(kbId), docId);
+            await loadData();
+        } catch (err) {
+            console.error('Reprocess failed:', err);
+            alert(err instanceof Error ? err.message : '重新处理失败');
+        } finally {
+            setIsReprocessing(null);
+        }
+    };
+
+    // 显示删除确认对话框
+    const showDeleteConfirm = (docId: number, filename: string) => {
+        setDeleteConfirm({ show: true, docId, filename });
+    };
+
+    // 确认删除
+    const handleDeleteDocument = async () => {
+        if (!deleteConfirm.docId) return;
+
+        setIsDeleting(true);
+        try {
+            await deleteDocument(parseInt(kbId), deleteConfirm.docId);
+            await loadData();
+            setDeleteConfirm({ show: false, docId: null, filename: '' });
+        } catch (err) {
+            console.error('Delete failed:', err);
+            alert(err instanceof Error ? err.message : '删除失败');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    // 加载中状态
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-3 text-muted-foreground">加载中...</span>
+            </div>
+        );
+    }
+
+    // 错误状态
+    if (error) {
+        return (
+            <div className="card p-6 text-center">
+                <AlertCircle className="h-12 w-12 mx-auto text-error mb-4" />
+                <p className="text-error mb-4">{error}</p>
+                <button onClick={loadData} className="btn-primary">重试</button>
+            </div>
+        );
+    }
+
+    if (!kbDetail) {
+        return (
+            <div className="card p-6 text-center">
+                <p className="text-muted-foreground">知识库不存在</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -133,15 +290,15 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                 <div className="flex items-start justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-foreground">{kbDetail.name}</h1>
-                        <p className="text-muted-foreground mt-1">{kbDetail.description}</p>
+                        <p className="text-muted-foreground mt-1">{kbDetail.description || '暂无描述'}</p>
                         <div className="flex items-center gap-6 mt-4 text-sm text-muted-foreground">
-                            <span>{kbDetail.documentCount} 篇文档</span>
-                            <span>创建于 {kbDetail.createdAt.split(' ')[0]}</span>
-                            <span>更新于 {kbDetail.updatedAt}</span>
+                            <span>{kbDetail.document_count} 篇文档</span>
+                            <span>创建于 {formatDate(kbDetail.created_at).split(' ')[0]}</span>
+                            <span>更新于 {formatDate(kbDetail.updated_at)}</span>
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <Link href={`/knowledge/${params.id}/settings`} className="btn-outline">
+                        <Link href={`/knowledge/${kbId}/settings`} className="btn-outline">
                             <Settings className="h-4 w-4 mr-2" />
                             设置
                         </Link>
@@ -169,19 +326,10 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <select className="input w-32">
-                        <option value="all">全部状态</option>
-                        <option value="completed">已完成</option>
-                        <option value="processing">处理中</option>
-                        <option value="failed">失败</option>
-                    </select>
-                    <select className="input w-32">
-                        <option value="all">全部类型</option>
-                        <option value="pdf">PDF</option>
-                        <option value="docx">Word</option>
-                        <option value="xlsx">Excel</option>
-                        <option value="md">Markdown</option>
-                    </select>
+                    <button onClick={loadData} className="btn-outline">
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        刷新
+                    </button>
                 </div>
             </div>
 
@@ -215,8 +363,8 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                     </thead>
                     <tbody className="divide-y divide-border">
                         {filteredDocs.map((doc) => {
-                            const FileIcon = fileIcons[doc.fileType] || File;
-                            const status = statusConfig[doc.status as keyof typeof statusConfig];
+                            const FileIcon = fileIcons[doc.file_type] || File;
+                            const status = statusConfig[doc.status as keyof typeof statusConfig] || statusConfig.pending;
 
                             return (
                                 <tr
@@ -227,7 +375,7 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                                         <div className="flex items-center gap-3">
                                             <FileIcon className="h-5 w-5 text-primary shrink-0" />
                                             <Link
-                                                href={`/knowledge/${params.id}/doc/${doc.id}`}
+                                                href={`/knowledge/${kbId}/doc/${doc.id}`}
                                                 className="font-medium text-foreground hover:text-primary cursor-pointer"
                                             >
                                                 {doc.filename}
@@ -235,10 +383,10 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                                         </div>
                                     </td>
                                     <td className="px-4 py-4 text-sm text-muted-foreground uppercase">
-                                        {doc.fileType}
+                                        {doc.file_type}
                                     </td>
                                     <td className="px-4 py-4 text-sm text-muted-foreground">
-                                        {formatFileSize(doc.fileSize)}
+                                        {formatFileSize(doc.file_size)}
                                     </td>
                                     <td className="px-4 py-4">
                                         <span
@@ -248,23 +396,40 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
                                         </span>
                                     </td>
                                     <td className="px-4 py-4 text-sm text-muted-foreground">
-                                        {doc.chunkCount}
+                                        {doc.chunk_count}
                                     </td>
                                     <td className="px-4 py-4 text-sm text-muted-foreground">
-                                        {doc.createdAt}
+                                        {formatDate(doc.created_at)}
                                     </td>
                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-2">
-                                            <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer">
+                                            <button
+                                                onClick={() => handleViewDocument(doc.id)}
+                                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer"
+                                                title="查看详情"
+                                            >
                                                 <Eye className="h-4 w-4" />
                                             </button>
-                                            <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer">
+                                            <button
+                                                onClick={() => handleDownloadDocument(doc.id)}
+                                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer"
+                                                title="下载文档"
+                                            >
                                                 <Download className="h-4 w-4" />
                                             </button>
-                                            <button className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer">
-                                                <RefreshCw className="h-4 w-4" />
+                                            <button
+                                                onClick={() => handleReprocessDocument(doc.id)}
+                                                disabled={isReprocessing === doc.id}
+                                                className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded cursor-pointer disabled:opacity-50"
+                                                title="重新处理"
+                                            >
+                                                <RefreshCw className={`h-4 w-4 ${isReprocessing === doc.id ? 'animate-spin' : ''}`} />
                                             </button>
-                                            <button className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded cursor-pointer">
+                                            <button
+                                                onClick={() => showDeleteConfirm(doc.id, doc.filename)}
+                                                className="p-1.5 text-muted-foreground hover:text-error hover:bg-error/10 rounded cursor-pointer"
+                                                title="删除文档"
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </button>
                                         </div>
@@ -277,7 +442,7 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
 
                 {filteredDocs.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground">
-                        没有找到匹配的文档
+                        {documents.length === 0 ? '暂无文档，点击上方按钮上传' : '没有找到匹配的文档'}
                     </div>
                 )}
             </div>
@@ -286,23 +451,133 @@ export default function KnowledgeDetailPage({ params }: { params: { id: string }
             {showUploadModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
                     <div className="card p-6 w-full max-w-lg animate-slide-in">
-                        <h2 className="text-lg font-semibold text-foreground mb-4">上传文档</h2>
-                        <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold text-foreground">上传文档</h2>
+                            <button
+                                onClick={handleCloseModal}
+                                className="p-1 text-muted-foreground hover:text-foreground"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        {uploadError && (
+                            <div className="mb-4 p-3 bg-error/10 border border-error/50 rounded-lg text-error text-sm">
+                                {uploadError}
+                            </div>
+                        )}
+
+                        {/* 拖放区域 */}
+                        <div
+                            className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
                             <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                             <p className="text-foreground mb-2">拖拽文件到此处上传</p>
                             <p className="text-sm text-muted-foreground mb-4">
                                 支持 PDF、Word、Excel、Markdown、图片等格式
                             </p>
-                            <button className="btn-primary">选择文件</button>
+                            <button
+                                type="button"
+                                className="btn-primary"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    fileInputRef.current?.click();
+                                }}
+                            >
+                                选择文件
+                            </button>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                multiple
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.md,.txt,.png,.jpg,.jpeg"
+                                onChange={handleFileSelect}
+                            />
                         </div>
+
+                        {/* 已选文件列表 */}
+                        {selectedFiles.length > 0 && (
+                            <div className="mt-4 space-y-2">
+                                <p className="text-sm font-medium text-foreground">
+                                    已选择 {selectedFiles.length} 个文件
+                                </p>
+                                <div className="max-h-40 overflow-y-auto space-y-2">
+                                    {selectedFiles.map((file, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-2 bg-muted/50 rounded-lg"
+                                        >
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <File className="h-4 w-4 text-primary shrink-0" />
+                                                <span className="text-sm text-foreground truncate">
+                                                    {file.name}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground shrink-0">
+                                                    ({formatFileSize(file.size)})
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={() => removeFile(index)}
+                                                className="p-1 text-muted-foreground hover:text-error shrink-0"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 按钮 */}
                         <div className="flex gap-3 pt-6">
                             <button
-                                onClick={() => setShowUploadModal(false)}
+                                onClick={handleCloseModal}
                                 className="btn-outline flex-1"
+                                disabled={isUploading}
                             >
                                 取消
                             </button>
-                            <button className="btn-primary flex-1">开始上传</button>
+                            <button
+                                onClick={handleUpload}
+                                className="btn-primary flex-1 flex items-center justify-center gap-2"
+                                disabled={isUploading || selectedFiles.length === 0}
+                            >
+                                {isUploading && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {isUploading ? '上传中...' : '开始上传'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 删除确认对话框 */}
+            {deleteConfirm.show && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="card p-6 w-full max-w-md animate-slide-in">
+                        <h2 className="text-lg font-semibold text-foreground mb-4">确认删除</h2>
+                        <p className="text-muted-foreground mb-6">
+                            确定要删除文档 <span className="font-medium text-foreground">{deleteConfirm.filename}</span> 吗？此操作不可恢复。
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteConfirm({ show: false, docId: null, filename: '' })}
+                                className="btn-outline flex-1"
+                                disabled={isDeleting}
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={handleDeleteDocument}
+                                className="bg-error hover:bg-error/90 text-white px-4 py-2 rounded-lg flex-1 flex items-center justify-center gap-2"
+                                disabled={isDeleting}
+                            >
+                                {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                                {isDeleting ? '删除中...' : '确认删除'}
+                            </button>
                         </div>
                     </div>
                 </div>

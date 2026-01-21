@@ -21,13 +21,34 @@ export default function LoginPage() {
         setError('');
 
         try {
-            // TODO: 实际登录API调用
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+            // 调用后端登录API
+            const response = await fetch('http://localhost:8000/api/v1/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    username: formData.username,
+                    password: formData.password,
+                }),
+            });
 
-            // 模拟登录成功
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || '登录失败');
+            }
+
+            const data = await response.json();
+
+            // 存储Token到localStorage
+            if (data.access_token) {
+                localStorage.setItem('token', data.access_token);
+            }
+
+            // 登录成功，跳转到仪表盘
             router.push('/dashboard');
         } catch (err) {
-            setError('用户名或密码错误');
+            setError(err instanceof Error ? err.message : '用户名或密码错误');
         } finally {
             setLoading(false);
         }

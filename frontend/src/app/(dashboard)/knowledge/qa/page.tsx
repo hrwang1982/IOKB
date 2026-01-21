@@ -230,6 +230,12 @@ perf top
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit(e);
+                            }
+                        }}
                         placeholder="输入您的问题，如: 服务器CPU使用率过高怎么处理？"
                         className="input flex-1"
                         disabled={loading}
@@ -237,6 +243,10 @@ perf top
                     <button
                         type="submit"
                         disabled={!query.trim() || loading}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleSubmit(e);
+                        }}
                         className="btn-primary px-6"
                     >
                         <Send className="h-4 w-4" />

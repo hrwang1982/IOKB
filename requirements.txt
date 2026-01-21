@@ -8,6 +8,7 @@ email-validator>=2.1.0
 # Database
 sqlalchemy>=2.0.0
 pymysql>=1.1.0
+aiomysql>=0.2.0
 alembic>=1.13.0
 
 # Elasticsearch

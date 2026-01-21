@@ -42,7 +42,7 @@ class Document(Base):
     status = Column(String(20), default="pending", comment="处理状态")
     chunk_count = Column(Integer, default=0, comment="分片数量")
     error_message = Column(Text, comment="错误信息")
-    metadata = Column(JSON, comment="元数据")
+    doc_metadata = Column(JSON, comment="元数据")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
@@ -60,7 +60,7 @@ class DocumentChunk(Base):
     chunk_index = Column(Integer, nullable=False, comment="分片索引")
     content = Column(Text, nullable=False, comment="分片内容")
     content_length = Column(Integer, comment="内容长度")
-    metadata = Column(JSON, comment="元数据")
+    doc_metadata = Column(JSON, comment="元数据")
     embedding_id = Column(String(100), comment="向量存储ID")
     created_at = Column(DateTime, default=datetime.now)
     

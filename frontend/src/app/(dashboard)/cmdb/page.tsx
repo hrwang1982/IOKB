@@ -91,6 +91,7 @@ export default function CMDBPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedType, setSelectedType] = useState<string>('all');
     const [selectedStatus, setSelectedStatus] = useState<string>('all');
+    const [showAddModal, setShowAddModal] = useState(false);
 
     const filteredCIs = mockCIs.filter((ci) => {
         if (selectedType !== 'all' && ci.typeCode !== selectedType) return false;
@@ -117,7 +118,10 @@ export default function CMDBPage() {
                         <Network className="h-4 w-4" />
                         拓扑图
                     </Link>
-                    <button className="btn-primary flex items-center gap-2">
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="btn-primary flex items-center gap-2"
+                    >
                         <Plus className="h-4 w-4" />
                         新增配置项
                     </button>
@@ -300,6 +304,77 @@ export default function CMDBPage() {
                     </div>
                 )}
             </div>
+
+            {/* 新增配置项模态框 */}
+            {showAddModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="card p-6 w-full max-w-lg animate-slide-in">
+                        <h2 className="text-lg font-semibold text-foreground mb-4">新增配置项</h2>
+                        <form className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    配置项名称 <span className="text-error">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="如: server-prod-002"
+                                    className="input w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    配置项类型 <span className="text-error">*</span>
+                                </label>
+                                <select className="input w-full">
+                                    <option value="">请选择类型</option>
+                                    <option value="server">物理服务器</option>
+                                    <option value="database">数据库</option>
+                                    <option value="network">网络设备</option>
+                                    <option value="application">应用服务</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    标识符
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="如: SRV-002"
+                                    className="input w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    IP 地址
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="如: 192.168.1.100"
+                                    className="input w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    描述
+                                </label>
+                                <textarea
+                                    placeholder="配置项描述信息..."
+                                    className="input w-full min-h-[80px] resize-none"
+                                />
+                            </div>
+                        </form>
+                        <div className="flex gap-3 pt-6">
+                            <button
+                                onClick={() => setShowAddModal(false)}
+                                className="btn-outline flex-1"
+                            >
+                                取消
+                            </button>
+                            <button className="btn-primary flex-1">创建配置项</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -5,10 +5,15 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import select, func, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from loguru import logger
 
 from app.api.auth import oauth2_scheme
+from app.core.database import get_async_session
+from app.models.knowledge import KnowledgeBase, Document, DocumentChunk
 
 router = APIRouter()
 
@@ -87,13 +92,45 @@ class QAResponse(BaseModel):
 async def list_knowledge_bases(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """获取知识库列表"""
-    # TODO: 实现分页查询
+    # 计算偏移量
+    offset = (page - 1) * size
+    
+    # 查询知识库列表
+    result = await session.execute(
+        select(KnowledgeBase)
+        .order_by(KnowledgeBase.updated_at.desc())
+        .offset(offset)
+        .limit(size)
+    )
+    knowledge_bases = result.scalars().all()
+    
+    # 查询总数
+    count_result = await session.execute(
+        select(func.count(KnowledgeBase.id))
+    )
+    total = count_result.scalar() or 0
+    
+    # 转换为响应格式
+    items = [
+        KnowledgeBaseResponse(
+            id=kb.id,
+            name=kb.name,
+            description=kb.description,
+            document_count=kb.document_count or 0,
+            status=kb.status or "active",
+            created_at=kb.created_at,
+            updated_at=kb.updated_at
+        )
+        for kb in knowledge_bases
+    ]
+    
     return {
-        "items": [],
-        "total": 0,
+        "items": items,
+        "total": total,
         "page": page,
         "size": size
     }
@@ -102,35 +139,58 @@ async def list_knowledge_bases(
 @router.post("", response_model=KnowledgeBaseResponse, summary="创建知识库")
 async def create_knowledge_base(
     kb: KnowledgeBaseCreate,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """创建新知识库"""
-    # TODO: 实现创建逻辑
-    now = datetime.now()
-    return KnowledgeBaseResponse(
-        id=1,
+    # 创建知识库对象
+    new_kb = KnowledgeBase(
         name=kb.name,
         description=kb.description,
-        document_count=0,
         status="active",
-        created_at=now,
-        updated_at=now
+        document_count=0,
+        chunk_count=0,
+    )
+    
+    # 添加到数据库
+    session.add(new_kb)
+    await session.flush()  # 获取自动生成的ID
+    await session.refresh(new_kb)  # 刷新获取完整对象
+    
+    return KnowledgeBaseResponse(
+        id=new_kb.id,
+        name=new_kb.name,
+        description=new_kb.description,
+        document_count=new_kb.document_count or 0,
+        status=new_kb.status,
+        created_at=new_kb.created_at,
+        updated_at=new_kb.updated_at
     )
 
 
 @router.get("/{kb_id}", response_model=KnowledgeBaseResponse, summary="获取知识库详情")
-async def get_knowledge_base(kb_id: int, token: str = Depends(oauth2_scheme)):
+async def get_knowledge_base(
+    kb_id: int, 
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
+):
     """获取知识库详情"""
-    # TODO: 查询知识库
-    now = datetime.now()
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
     return KnowledgeBaseResponse(
-        id=kb_id,
-        name="示例知识库",
-        description="这是一个示例知识库",
-        document_count=0,
-        status="active",
-        created_at=now,
-        updated_at=now
+        id=kb.id,
+        name=kb.name,
+        description=kb.description,
+        document_count=kb.document_count or 0,
+        status=kb.status,
+        created_at=kb.created_at,
+        updated_at=kb.updated_at
     )
 
 
@@ -138,26 +198,71 @@ async def get_knowledge_base(kb_id: int, token: str = Depends(oauth2_scheme)):
 async def update_knowledge_base(
     kb_id: int,
     kb: KnowledgeBaseCreate,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """更新知识库信息"""
-    # TODO: 实现更新逻辑
-    now = datetime.now()
+    # 查询知识库
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    existing_kb = result.scalar_one_or_none()
+    
+    if not existing_kb:
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
+    # 更新字段
+    existing_kb.name = kb.name
+    existing_kb.description = kb.description
+    existing_kb.updated_at = datetime.now()
+    
+    await session.flush()
+    await session.refresh(existing_kb)
+    
     return KnowledgeBaseResponse(
-        id=kb_id,
-        name=kb.name,
-        description=kb.description,
-        document_count=0,
-        status="active",
-        created_at=now,
-        updated_at=now
+        id=existing_kb.id,
+        name=existing_kb.name,
+        description=existing_kb.description,
+        document_count=existing_kb.document_count or 0,
+        status=existing_kb.status,
+        created_at=existing_kb.created_at,
+        updated_at=existing_kb.updated_at
     )
 
 
 @router.delete("/{kb_id}", summary="删除知识库")
-async def delete_knowledge_base(kb_id: int, token: str = Depends(oauth2_scheme)):
+async def delete_knowledge_base(
+    kb_id: int, 
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
+):
     """删除知识库及其所有文档"""
-    # TODO: 实现删除逻辑
+    # 检查知识库是否存在
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
+    # 删除关联的文档分片
+    await session.execute(
+        delete(DocumentChunk).where(
+            DocumentChunk.document_id.in_(
+                select(Document.id).where(Document.kb_id == kb_id)
+            )
+        )
+    )
+    
+    # 删除关联的文档
+    await session.execute(
+        delete(Document).where(Document.kb_id == kb_id)
+    )
+    
+    # 删除知识库
+    await session.delete(kb)
+    
     return {"message": f"知识库 {kb_id} 已删除"}
 
 
@@ -168,13 +273,54 @@ async def list_documents(
     kb_id: int,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """获取知识库中的文档列表"""
-    # TODO: 实现分页查询
+    # 检查知识库是否存在
+    kb_result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    if not kb_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
+    # 计算偏移量
+    offset = (page - 1) * size
+    
+    # 查询文档列表
+    result = await session.execute(
+        select(Document)
+        .where(Document.kb_id == kb_id)
+        .order_by(Document.created_at.desc())
+        .offset(offset)
+        .limit(size)
+    )
+    documents = result.scalars().all()
+    
+    # 查询总数
+    count_result = await session.execute(
+        select(func.count(Document.id)).where(Document.kb_id == kb_id)
+    )
+    total = count_result.scalar() or 0
+    
+    # 转换为响应格式
+    items = [
+        DocumentResponse(
+            id=doc.id,
+            kb_id=doc.kb_id,
+            filename=doc.filename,
+            file_type=doc.file_type or "",
+            file_size=doc.file_size or 0,
+            status=doc.status or "pending",
+            chunk_count=doc.chunk_count or 0,
+            created_at=doc.created_at
+        )
+        for doc in documents
+    ]
+    
     return {
-        "items": [],
-        "total": 0,
+        "items": items,
+        "total": total,
         "page": page,
         "size": size
     }
@@ -184,21 +330,72 @@ async def list_documents(
 async def upload_document(
     kb_id: int,
     files: List[UploadFile] = File(...),
-    token: str = Depends(oauth2_scheme)
+    background_tasks: BackgroundTasks = None,
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     上传文档到知识库
     
     支持格式：PDF, Word, Excel, Markdown, TXT, 图片等
     """
-    # TODO: 实现文档上传和处理逻辑
+    from app.services.document_processor import document_processor, process_document_task
+    
+    # 检查知识库是否存在
+    kb_result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = kb_result.scalar_one_or_none()
+    if not kb:
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
     results = []
     for file in files:
+        # 获取文件类型
+        file_type = file.filename.split(".")[-1].lower() if file.filename else "unknown"
+        
+        # 读取文件内容
+        content = await file.read()
+        file_size = len(content)
+        
+        # 保存文件到磁盘
+        try:
+            file_path = await document_processor.save_file(kb_id, file.filename, content)
+        except Exception as e:
+            results.append({
+                "filename": file.filename,
+                "status": "failed",
+                "message": f"文件保存失败: {str(e)}"
+            })
+            continue
+        
+        # 创建文档记录
+        doc = Document(
+            kb_id=kb_id,
+            filename=file.filename,
+            file_type=file_type,
+            file_size=file_size,
+            file_path=file_path,
+            status="pending",
+        )
+        session.add(doc)
+        await session.flush()  # 获取doc.id
+        
+        # 异步处理文档
+        import asyncio
+        asyncio.create_task(process_document_task(doc.id, kb_id, file_path))
+        
         results.append({
             "filename": file.filename,
             "status": "pending",
             "message": "文档已上传，正在处理中"
         })
+    
+    # 更新知识库文档数量
+    kb.document_count = (kb.document_count or 0) + len([r for r in results if r["status"] != "failed"])
+    
+    await session.commit()
+    
     return {"uploaded": results}
 
 
@@ -206,19 +403,30 @@ async def upload_document(
 async def get_document(
     kb_id: int,
     doc_id: int,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """获取文档详情"""
-    # TODO: 查询文档
+    result = await session.execute(
+        select(Document).where(
+            Document.id == doc_id,
+            Document.kb_id == kb_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    
     return DocumentResponse(
-        id=doc_id,
-        kb_id=kb_id,
-        filename="example.pdf",
-        file_type="pdf",
-        file_size=1024,
-        status="completed",
-        chunk_count=10,
-        created_at=datetime.now()
+        id=doc.id,
+        kb_id=doc.kb_id,
+        filename=doc.filename,
+        file_type=doc.file_type or "",
+        file_size=doc.file_size or 0,
+        status=doc.status or "pending",
+        chunk_count=doc.chunk_count or 0,
+        created_at=doc.created_at
     )
 
 
@@ -226,10 +434,38 @@ async def get_document(
 async def delete_document(
     kb_id: int,
     doc_id: int,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """删除文档"""
-    # TODO: 实现删除逻辑
+    # 查询文档
+    result = await session.execute(
+        select(Document).where(
+            Document.id == doc_id,
+            Document.kb_id == kb_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    
+    # 删除关联的分片
+    await session.execute(
+        delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
+    )
+    
+    # 删除文档
+    await session.delete(doc)
+    
+    # 更新知识库文档数量
+    kb_result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = kb_result.scalar_one_or_none()
+    if kb:
+        kb.document_count = max(0, (kb.document_count or 0) - 1)
+    
     return {"message": f"文档 {doc_id} 已删除"}
 
 
@@ -237,11 +473,70 @@ async def delete_document(
 async def reprocess_document(
     kb_id: int,
     doc_id: int,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """重新解析和向量化文档"""
-    # TODO: 触发重新处理
+    # 查询文档
+    result = await session.execute(
+        select(Document).where(
+            Document.id == doc_id,
+            Document.kb_id == kb_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    
+    # 更新状态为处理中
+    doc.status = "processing"
+    
+    # TODO: 触发重新处理任务
+    
     return {"message": "文档正在重新处理中"}
+
+
+@router.get("/{kb_id}/documents/{doc_id}/download", summary="下载文档")
+async def download_document(
+    kb_id: int,
+    doc_id: int,
+    token: Optional[str] = Query(None),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """
+    下载文档原始文件
+    
+    注意：当前版本文件未保存到磁盘，暂时返回404
+    """
+    from fastapi.responses import JSONResponse
+    
+    # 验证token（可以通过query参数传递）
+    if not token:
+        raise HTTPException(status_code=401, detail="未授权")
+    
+    # 查询文档
+    result = await session.execute(
+        select(Document).where(
+            Document.id == doc_id,
+            Document.kb_id == kb_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    
+    # TODO: 实现文件存储后返回实际文件
+    # 目前文件未保存到磁盘，返回提示信息
+    return JSONResponse(
+        status_code=501,
+        content={
+            "detail": f"文档 '{doc.filename}' 暂不支持下载，文件存储功能尚未实现",
+            "filename": doc.filename,
+            "file_type": doc.file_type
+        }
+    )
 
 
 # ==================== 搜索与问答 ====================
@@ -259,8 +554,37 @@ async def search(
     - **top_k**: 返回结果数量
     - **score_threshold**: 最低相关度阈值
     """
-    # TODO: 实现向量检索
-    return []
+    from app.core.rag import embedding_service, retriever
+    
+    try:
+        # 1. 向量化查询
+        query_embedding = await embedding_service.embed(request.query)
+        
+        # 2. 检索
+        kb_ids = request.kb_ids or []
+        results = await retriever.search(
+            kb_ids=kb_ids,
+            query_vector=query_embedding.vector,
+            query_text=request.query,
+            top_k=request.top_k,
+            score_threshold=request.score_threshold,
+        )
+        
+        # 3. 转换为响应格式
+        return [
+            SearchResult(
+                chunk_id=r.chunk_index or 0,
+                document_id=r.document_id or 0,
+                document_name=r.metadata.get("filename", "") if r.metadata else "",
+                content=r.content,
+                score=r.score,
+                metadata=r.metadata,
+            )
+            for r in results
+        ]
+    except Exception as e:
+        logger.error(f"搜索失败: {e}")
+        return []
 
 
 @router.post("/qa", response_model=QAResponse, summary="知识问答")
@@ -275,8 +599,34 @@ async def question_answer(
     2. 使用大模型生成答案
     3. 返回答案及引用来源
     """
-    # TODO: 实现RAG问答
-    return QAResponse(
-        answer="这是一个示例答案。",
-        sources=[]
-    )
+    from app.core.rag import rag_service
+    
+    try:
+        kb_ids = request.kb_ids or []
+        
+        result = await rag_service.answer(
+            question=request.question,
+            kb_ids=kb_ids,
+        )
+        
+        return QAResponse(
+            answer=result.answer,
+            sources=[
+                SearchResult(
+                    chunk_id=s.get("chunk_index", 0),
+                    document_id=s.get("document_id", 0),
+                    document_name="",
+                    content=s.get("content", ""),
+                    score=s.get("score", 0),
+                    metadata=s,
+                )
+                for s in result.sources
+            ]
+        )
+    except Exception as e:
+        logger.error(f"问答失败: {e}")
+        return QAResponse(
+            answer=f"抱歉，处理问题时发生错误: {str(e)}",
+            sources=[]
+        )
+
