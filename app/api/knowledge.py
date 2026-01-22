@@ -568,10 +568,10 @@ async def download_document(
 ):
     """
     下载文档原始文件
-    
-    注意：当前版本文件未保存到磁盘，暂时返回404
     """
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import FileResponse
+    from urllib.parse import quote
+    import os
     
     # 验证token（可以通过query参数传递）
     if not token:
@@ -589,14 +589,37 @@ async def download_document(
     if not doc:
         raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
     
-    # TODO: 实现文件存储后返回实际文件
-    # 目前文件未保存到磁盘，返回提示信息
-    return JSONResponse(
-        status_code=501,
-        content={
-            "detail": f"文档 '{doc.filename}' 暂不支持下载，文件存储功能尚未实现",
-            "filename": doc.filename,
-            "file_type": doc.file_type
+    # 检查文件路径是否存在
+    if not doc.file_path:
+        raise HTTPException(status_code=404, detail=f"文档 '{doc.filename}' 没有关联的文件路径")
+    
+    # 检查文件是否存在
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=404, detail=f"文档文件 '{doc.filename}' 不存在于服务器")
+    
+    # 根据文件类型设置media_type
+    media_types = {
+        "txt": "text/plain; charset=utf-8",
+        "pdf": "application/pdf",
+        "doc": "application/msword",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xls": "application/vnd.ms-excel",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "md": "text/markdown; charset=utf-8",
+        "html": "text/html; charset=utf-8",
+    }
+    media_type = media_types.get(doc.file_type.lower(), "application/octet-stream")
+    
+    # 对文件名进行URL编码以支持中文
+    encoded_filename = quote(doc.filename)
+    
+    # 返回文件，设置正确的Content-Disposition
+    return FileResponse(
+        path=doc.file_path,
+        filename=doc.filename,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{doc.filename}\"; filename*=UTF-8''{encoded_filename}"
         }
     )
 

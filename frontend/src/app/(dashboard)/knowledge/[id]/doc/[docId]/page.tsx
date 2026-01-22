@@ -134,8 +134,14 @@ export default function DocumentDetailPage() {
 
     // 处理函数
     const handleDownload = () => {
+        // 创建临时链接触发下载
         const url = getDocumentDownloadUrl(parseInt(kbId), parseInt(docId));
-        window.open(url, '_blank');
+        const link = window.document.createElement('a');
+        link.href = url;
+        link.download = ''; // 使用服务器返回的文件名
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
     };
 
     const handleReprocess = async () => {

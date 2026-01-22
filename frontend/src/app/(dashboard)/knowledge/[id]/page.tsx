@@ -203,7 +203,13 @@ export default function KnowledgeDetailPage() {
     // 下载文档
     const handleDownloadDocument = (docId: number) => {
         const url = getDocumentDownloadUrl(parseInt(kbId), docId);
-        window.open(url, '_blank');
+        // 创建临时链接触发下载
+        const link = window.document.createElement('a');
+        link.href = url;
+        link.download = ''; // 使用服务器返回的文件名
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
     };
 
     // 重新处理文档
