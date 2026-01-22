@@ -13,7 +13,6 @@ import {
     FileSpreadsheet,
     RefreshCw,
     Trash2,
-    Eye,
     Copy,
     CheckCircle,
     Loader2,
@@ -22,11 +21,13 @@ import {
 import {
     getKnowledgeBase,
     getDocument,
+    getDocumentChunks,
     reprocessDocument,
     deleteDocument,
     getDocumentDownloadUrl,
     type KnowledgeBase,
     type Document,
+    type DocumentChunk,
 } from '@/lib/api';
 
 const fileIcons: Record<string, typeof File> = {
@@ -72,6 +73,9 @@ export default function DocumentDetailPage() {
     // 状态
     const [kbDetail, setKbDetail] = useState<KnowledgeBase | null>(null);
     const [document, setDocument] = useState<Document | null>(null);
+    const [chunks, setChunks] = useState<DocumentChunk[]>([]);
+    const [chunksTotal, setChunksTotal] = useState(0);
+    const [chunksLoading, setChunksLoading] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +91,13 @@ export default function DocumentDetailPage() {
             loadData();
         }
     }, [kbId, docId]);
+
+    // 切换到切片标签时加载切片数据
+    useEffect(() => {
+        if (activeTab === 'chunks' && chunks.length === 0 && document?.chunk_count && document.chunk_count > 0) {
+            loadChunks();
+        }
+    }, [activeTab, document]);
 
     const loadData = async () => {
         try {
@@ -108,6 +119,19 @@ export default function DocumentDetailPage() {
         }
     };
 
+    const loadChunks = async () => {
+        try {
+            setChunksLoading(true);
+            const response = await getDocumentChunks(parseInt(kbId), parseInt(docId), 1, 100);
+            setChunks(response.items);
+            setChunksTotal(response.total);
+        } catch (err) {
+            console.error('Failed to load chunks:', err);
+        } finally {
+            setChunksLoading(false);
+        }
+    };
+
     // 处理函数
     const handleDownload = () => {
         const url = getDocumentDownloadUrl(parseInt(kbId), parseInt(docId));
@@ -121,6 +145,8 @@ export default function DocumentDetailPage() {
         try {
             await reprocessDocument(parseInt(kbId), parseInt(docId));
             await loadData();
+            // 重新加载切片
+            setChunks([]);
         } catch (err) {
             console.error('Reprocess failed:', err);
             alert(err instanceof Error ? err.message : '重新处理失败');
@@ -317,14 +343,56 @@ export default function DocumentDetailPage() {
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {document.chunk_count === 0 ? (
+                    {chunksLoading ? (
+                        <div className="card p-8 text-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                            <span className="text-muted-foreground">加载切片数据...</span>
+                        </div>
+                    ) : chunks.length === 0 ? (
                         <div className="card p-8 text-center text-muted-foreground">
-                            暂无切片数据，文档可能正在处理中
+                            {document.chunk_count === 0
+                                ? '暂无切片数据，文档可能正在处理中'
+                                : '无法加载切片数据'}
                         </div>
                     ) : (
-                        <div className="card p-8 text-center text-muted-foreground">
-                            切片数据需要后端API支持，暂未实现
-                        </div>
+                        <>
+                            <div className="text-sm text-muted-foreground mb-2">
+                                共 {chunksTotal} 个切片
+                            </div>
+                            {chunks.map((chunk) => (
+                                <div key={chunk.id} className="card p-4">
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded">
+                                                切片 #{chunk.chunk_index + 1}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">
+                                                {chunk.content_length} 字符
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleCopyChunk(chunk.id, chunk.content)}
+                                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors"
+                                            title="复制内容"
+                                        >
+                                            {copiedChunkId === chunk.id ? (
+                                                <CheckCircle className="h-4 w-4 text-success" />
+                                            ) : (
+                                                <Copy className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    </div>
+                                    <div className="text-sm text-foreground whitespace-pre-wrap bg-muted/30 p-3 rounded max-h-48 overflow-y-auto">
+                                        {chunk.content}
+                                    </div>
+                                    {chunk.doc_metadata && Object.keys(chunk.doc_metadata).length > 0 && (
+                                        <div className="mt-2 text-xs text-muted-foreground">
+                                            位置: {(chunk.doc_metadata as { start_pos?: number }).start_pos ?? 0} - {(chunk.doc_metadata as { end_pos?: number }).end_pos ?? 0}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </>
                     )}
                 </div>
             )}

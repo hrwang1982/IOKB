@@ -497,6 +497,68 @@ async def reprocess_document(
     return {"message": "文档正在重新处理中"}
 
 
+@router.get("/{kb_id}/documents/{doc_id}/chunks", summary="获取文档切片列表")
+async def get_document_chunks(
+    kb_id: int,
+    doc_id: int,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """
+    获取文档的切片列表
+    
+    返回文档经过RAG处理后的切片数据，包括内容、位置信息等
+    """
+    # 验证文档存在
+    result = await session.execute(
+        select(Document).where(
+            Document.id == doc_id,
+            Document.kb_id == kb_id
+        )
+    )
+    doc = result.scalar_one_or_none()
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    
+    # 查询切片总数
+    count_result = await session.execute(
+        select(func.count(DocumentChunk.id)).where(
+            DocumentChunk.document_id == doc_id
+        )
+    )
+    total = count_result.scalar() or 0
+    
+    # 查询切片列表
+    result = await session.execute(
+        select(DocumentChunk)
+        .where(DocumentChunk.document_id == doc_id)
+        .order_by(DocumentChunk.chunk_index)
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    chunks = result.scalars().all()
+    
+    return {
+        "items": [
+            {
+                "id": chunk.id,
+                "document_id": chunk.document_id,
+                "chunk_index": chunk.chunk_index,
+                "content": chunk.content,
+                "content_length": chunk.content_length,
+                "doc_metadata": chunk.doc_metadata,
+                "created_at": chunk.created_at.isoformat() if chunk.created_at else None,
+            }
+            for chunk in chunks
+        ],
+        "total": total,
+        "page": page,
+        "size": size,
+    }
+
+
 @router.get("/{kb_id}/documents/{doc_id}/download", summary="下载文档")
 async def download_document(
     kb_id: int,

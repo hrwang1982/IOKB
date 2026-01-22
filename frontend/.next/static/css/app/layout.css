@@ -908,6 +908,9 @@ body {
 .max-h-\[80vh\]{
   max-height: 80vh;
 }
+.max-h-48{
+  max-height: 12rem;
+}
 .min-h-\[100px\]{
   min-height: 100px;
 }
