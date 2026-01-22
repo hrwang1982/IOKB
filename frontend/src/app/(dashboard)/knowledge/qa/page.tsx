@@ -1,19 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft,
-    BookOpen,
     ChevronRight,
     FileText,
-    MessageSquare,
     Send,
     Sparkles,
     ThumbsDown,
     ThumbsUp,
     User,
 } from 'lucide-react';
+import { getKnowledgeBases, askQuestion, KnowledgeBase, QASource } from '@/lib/api';
 
 interface Message {
     id: string;
@@ -31,6 +30,9 @@ interface Message {
 export default function QAPage() {
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
+    const [selectedKbId, setSelectedKbId] = useState<string>('all');
+    const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+    const [loadingKbs, setLoadingKbs] = useState(true);
     const [messages, setMessages] = useState<Message[]>([
         {
             id: '1',
@@ -39,6 +41,21 @@ export default function QAPage() {
             timestamp: new Date(),
         },
     ]);
+
+    // 加载知识库列表
+    useEffect(() => {
+        async function loadKnowledgeBases() {
+            try {
+                const response = await getKnowledgeBases(1, 100);
+                setKnowledgeBases(response.items);
+            } catch (error) {
+                console.error('Failed to load knowledge bases:', error);
+            } finally {
+                setLoadingKbs(false);
+            }
+        }
+        loadKnowledgeBases();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,54 +72,48 @@ export default function QAPage() {
         setQuery('');
         setLoading(true);
 
-        // 模拟AI回答
-        await new Promise((r) => setTimeout(r, 2000));
+        try {
+            // 确定要查询的知识库ID
+            const kbIds: number[] = selectedKbId === 'all'
+                ? knowledgeBases.map(kb => kb.id)
+                : [parseInt(selectedKbId)];
 
-        const aiMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: `关于"${userMessage.content}"，根据知识库的内容，我为您找到了以下信息：
+            // 调用真实的问答API
+            const response = await askQuestion({
+                question: userMessage.content,
+                kb_ids: kbIds,
+                top_k: 5,
+            });
 
-**CPU使用率过高的常见原因：**
+            // 转换sources格式
+            const sources = response.sources.map((source: QASource, index: number) => ({
+                id: index,
+                title: source.document_name || `文档 ${source.document_id}`,
+                content: source.content.substring(0, 100) + '...',
+                score: source.score,
+            }));
 
-1. **应用负载过高** - 突发的业务流量增加导致服务器压力上升
-2. **进程异常** - 某个进程出现死循环或内存泄漏
-3. **定时任务冲突** - 多个定时任务同时执行
-4. **系统更新** - 后台自动更新占用资源
+            const aiMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: response.answer,
+                sources: sources.length > 0 ? sources : undefined,
+                timestamp: new Date(),
+            };
 
-**建议的排查步骤：**
-
-\`\`\`bash
-# 查看CPU占用最高的进程
-top -c
-
-# 查看特定进程的线程
-top -H -p <pid>
-
-# 使用perf分析CPU热点
-perf top
-\`\`\`
-
-如需更详细的信息，请查看下方引用的文档。`,
-            sources: [
-                {
-                    id: 1,
-                    title: 'CPU使用率过高处理方案.pdf',
-                    content: '当CPU使用率持续超过80%时，应立即排查...',
-                    score: 0.92,
-                },
-                {
-                    id: 2,
-                    title: 'Linux服务器性能优化指南.docx',
-                    content: 'CPU性能调优包括以下几个方面...',
-                    score: 0.85,
-                },
-            ],
-            timestamp: new Date(),
-        };
-
-        setMessages((prev) => [...prev, aiMessage]);
-        setLoading(false);
+            setMessages((prev) => [...prev, aiMessage]);
+        } catch (error) {
+            console.error('QA failed:', error);
+            const errorMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                role: 'assistant',
+                content: `抱歉，处理您的问题时发生错误：${error instanceof Error ? error.message : '未知错误'}`,
+                timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, errorMessage]);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -119,10 +130,18 @@ perf top
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">当前知识库:</span>
-                    <select className="input w-48 h-9 text-sm">
+                    <select
+                        className="input w-48 h-9 text-sm"
+                        value={selectedKbId}
+                        onChange={(e) => setSelectedKbId(e.target.value)}
+                        disabled={loadingKbs}
+                    >
                         <option value="all">全部知识库</option>
-                        <option value="1">运维知识库</option>
-                        <option value="2">故障处理手册</option>
+                        {knowledgeBases.map((kb) => (
+                            <option key={kb.id} value={kb.id.toString()}>
+                                {kb.name}
+                            </option>
+                        ))}
                     </select>
                 </div>
             </div>
@@ -179,7 +198,7 @@ perf top
                                                     {source.title}
                                                 </span>
                                                 <span className="ml-auto text-xs text-muted-foreground">
-                                                    匹配度 {Math.round(source.score * 100)}%
+                                                    相关度 {(source.score * 100).toFixed(0)}%
                                                 </span>
                                             </div>
                                             <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
