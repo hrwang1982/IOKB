@@ -82,6 +82,18 @@ class DocumentProcessor:
         """
         async with get_session_context() as session:
             try:
+                # 查询文档获取原始文件名
+                result = await session.execute(
+                    select(Document).where(Document.id == doc_id)
+                )
+                document = result.scalar_one_or_none()
+                if not document:
+                    logger.error(f"文档不存在: doc_id={doc_id}")
+                    return
+                
+                original_filename = document.filename  # 获取原始文件名
+                logger.info(f"处理文档: {original_filename} (doc_id={doc_id})")
+                
                 # 更新状态为处理中
                 await self._update_status(session, doc_id, "processing")
                 
@@ -128,6 +140,7 @@ class DocumentProcessor:
                         "metadata": {
                             "start_pos": chunk.start_pos,
                             "end_pos": chunk.end_pos,
+                            "filename": original_filename,  # 使用原始文件名
                         }
                     })
                 

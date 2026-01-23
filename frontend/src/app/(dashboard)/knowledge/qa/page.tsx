@@ -11,6 +11,7 @@ import {
     ThumbsDown,
     ThumbsUp,
     User,
+    X,
 } from 'lucide-react';
 import { getKnowledgeBases, askQuestion, KnowledgeBase, QASource } from '@/lib/api';
 
@@ -22,6 +23,7 @@ interface Message {
         id: number;
         title: string;
         content: string;
+        fullContent: string;  // 完整内容
         score: number;
     }[];
     timestamp: Date;
@@ -33,6 +35,7 @@ export default function QAPage() {
     const [selectedKbId, setSelectedKbId] = useState<string>('all');
     const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
     const [loadingKbs, setLoadingKbs] = useState(true);
+    const [selectedSource, setSelectedSource] = useState<{ id: number; title: string; content: string; fullContent: string; score: number } | null>(null);
     const [messages, setMessages] = useState<Message[]>([
         {
             id: '1',
@@ -89,7 +92,8 @@ export default function QAPage() {
             const sources = response.sources.map((source: QASource, index: number) => ({
                 id: index,
                 title: source.document_name || `文档 ${source.document_id}`,
-                content: source.content.substring(0, 100) + '...',
+                content: source.content.substring(0, 100) + '...',  // 缩略显示
+                fullContent: source.content,  // 保存完整内容
                 score: source.score,
             }));
 
@@ -191,6 +195,7 @@ export default function QAPage() {
                                         <div
                                             key={source.id}
                                             className="p-3 bg-muted/50 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer"
+                                            onClick={() => setSelectedSource(source)}
                                         >
                                             <div className="flex items-center gap-2">
                                                 <FileText className="h-4 w-4 text-primary shrink-0" />
@@ -275,6 +280,74 @@ export default function QAPage() {
                     AI回答基于知识库内容生成，仅供参考
                 </p>
             </div>
+
+            {/* 溯源详情模态框 */}
+            {selectedSource && (
+                <div
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => setSelectedSource(null)}
+                >
+                    <div
+                        className="bg-card border border-border rounded-lg max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* 模态框头部 */}
+                        <div className="flex items-center justify-between p-4 border-b border-border">
+                            <div className="flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-primary" />
+                                <h3 className="text-lg font-semibold text-foreground">
+                                    {selectedSource.title}
+                                </h3>
+                            </div>
+                            <button
+                                onClick={() => setSelectedSource(null)}
+                                className="p-1.5 hover:bg-muted rounded-lg transition-colors"
+                            >
+                                <X className="h-5 w-5 text-muted-foreground" />
+                            </button>
+                        </div>
+
+                        {/* 模态框内容 */}
+                        <div className="p-4 overflow-y-auto max-h-[calc(80vh-8rem)]">
+                            <div className="space-y-4">
+                                {/* 相关度分数 */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-muted-foreground">相关度:</span>
+                                    <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                                        <div
+                                            className="bg-primary h-full transition-all"
+                                            style={{ width: `${selectedSource.score * 100}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-sm font-medium text-foreground">
+                                        {(selectedSource.score * 100).toFixed(0)}%
+                                    </span>
+                                </div>
+
+                                {/* 完整内容 */}
+                                <div>
+                                    <h4 className="text-sm font-medium text-foreground mb-2">文档内容:</h4>
+                                    <div className="prose prose-sm dark:prose-invert max-w-none bg-muted/30 rounded-lg p-4 border border-border">
+                                        <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                                            {selectedSource.fullContent}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 模态框底部 */}
+                        <div className="p-4 border-t border-border flex justify-end">
+                            <button
+                                onClick={() => setSelectedSource(null)}
+                                className="btn-secondary px-4"
+                            >
+                                关闭
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

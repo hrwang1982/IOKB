@@ -167,6 +167,7 @@ class RAGService:
                 "score": ctx.score,
                 "document_id": ctx.document_id,
                 "chunk_index": ctx.chunk_index,
+                "metadata": ctx.metadata or {},
             }
             for ctx in contexts
         ]

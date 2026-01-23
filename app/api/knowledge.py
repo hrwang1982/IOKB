@@ -734,10 +734,10 @@ async def question_answer(
                 SearchResult(
                     chunk_id=s.get("chunk_index", 0),
                     document_id=s.get("document_id", 0),
-                    document_name="",
+                    document_name=s.get("metadata", {}).get("filename", "未知文档") if isinstance(s.get("metadata"), dict) else "未知文档",
                     content=s.get("content", ""),
                     score=s.get("score", 0),
-                    metadata=s,
+                    metadata=s.get("metadata", {}),
                 )
                 for s in result.sources
             ]
