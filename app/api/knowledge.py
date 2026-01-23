@@ -477,6 +477,10 @@ async def reprocess_document(
     session: AsyncSession = Depends(get_async_session)
 ):
     """重新解析和向量化文档"""
+    from app.services.document_processor import document_processor, process_document_task
+    import asyncio
+    import os
+    
     # 查询文档
     result = await session.execute(
         select(Document).where(
@@ -489,10 +493,40 @@ async def reprocess_document(
     if not doc:
         raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
     
-    # 更新状态为处理中
-    doc.status = "processing"
+    # 检查文件路径是否存在
+    if not doc.file_path:
+        raise HTTPException(status_code=400, detail="文档没有关联的文件路径，无法重新处理")
     
-    # TODO: 触发重新处理任务
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=400, detail=f"文档文件 '{doc.filename}' 不存在于服务器")
+    
+    # 删除旧的切片数据
+    await session.execute(
+        delete(DocumentChunk).where(DocumentChunk.document_id == doc_id)
+    )
+    
+    # 删除ES中的旧索引数据
+    try:
+        from app.core.rag import retriever
+        # 删除该文档的所有切片索引
+        if doc.chunk_count and doc.chunk_count > 0:
+            doc_ids_to_delete = [f"{doc_id}_{i}" for i in range(doc.chunk_count)]
+            for es_doc_id in doc_ids_to_delete:
+                try:
+                    await retriever.delete_document(kb_id, es_doc_id)
+                except:
+                    pass  # 忽略删除失败（可能已不存在）
+    except Exception as e:
+        logger.warning(f"清理ES索引时出错: {e}")
+    
+    # 更新状态为处理中，重置切片计数
+    doc.status = "processing"
+    doc.chunk_count = 0
+    doc.updated_at = datetime.now()
+    await session.commit()
+    
+    # 异步触发重新处理任务
+    asyncio.create_task(process_document_task(doc.id, kb_id, doc.file_path))
     
     return {"message": "文档正在重新处理中"}
 
