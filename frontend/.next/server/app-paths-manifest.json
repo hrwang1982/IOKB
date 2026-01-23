@@ -1,8 +1,8 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/(dashboard)/knowledge/[id]/doc/[docId]/page": "app/(dashboard)/knowledge/[id]/doc/[docId]/page.js",
   "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
-  "/(dashboard)/knowledge/[id]/page": "app/(dashboard)/knowledge/[id]/page.js",
   "/(dashboard)/knowledge/page": "app/(dashboard)/knowledge/page.js",
-  "/(dashboard)/knowledge/[id]/settings/page": "app/(dashboard)/knowledge/[id]/settings/page.js"
+  "/(dashboard)/knowledge/qa/page": "app/(dashboard)/knowledge/qa/page.js",
+  "/(dashboard)/knowledge/[id]/doc/[docId]/page": "app/(dashboard)/knowledge/[id]/doc/[docId]/page.js",
+  "/(dashboard)/knowledge/[id]/settings/page": "app/(dashboard)/knowledge/[id]/settings/page.js",
+  "/(dashboard)/knowledge/[id]/page": "app/(dashboard)/knowledge/[id]/page.js"
 }
