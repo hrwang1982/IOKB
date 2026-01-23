@@ -253,7 +253,7 @@ class EmbeddingService:
     async def embed_batch(
         self,
         texts: List[str],
-        batch_size: int = 20,
+        batch_size: int = 10,
     ) -> List[EmbeddingResult]:
         """
         批量向量化

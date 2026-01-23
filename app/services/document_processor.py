@@ -107,7 +107,7 @@ class DocumentProcessor:
                 # 3. 向量化
                 logger.info("开始向量化...")
                 chunk_texts = [c.content for c in chunks]
-                embeddings = await embedding_service.embed_batch(chunk_texts)
+                embeddings = await embedding_service.embed_batch(chunk_texts, batch_size=10)
                 logger.info(f"向量化完成, 共 {len(embeddings)} 个向量")
                 if embeddings:
                     logger.info(f"向量维度: {len(embeddings[0].vector)}")
