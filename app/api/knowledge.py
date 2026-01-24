@@ -654,7 +654,7 @@ async def download_document(
         filename=doc.filename,
         media_type=media_type,
         headers={
-            "Content-Disposition": f"attachment; filename=\"{doc.filename}\"; filename*=UTF-8''{encoded_filename}"
+            "Content-Disposition": f"attachment; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}"
         }
     )
 
