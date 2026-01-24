@@ -7,6 +7,14 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Callable
 
+# LangChain imports
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter as LCRecursiveSplitter
+    from langchain_text_splitters import MarkdownHeaderTextSplitter as LCMarkdownSplitter
+except ImportError:
+    from langchain.text_splitter import RecursiveCharacterTextSplitter as LCRecursiveSplitter
+    from langchain.text_splitter import MarkdownHeaderTextSplitter as LCMarkdownSplitter
+
 from loguru import logger
 
 
@@ -36,26 +44,9 @@ class TextSplitter:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.separator = separator
-    
-    def split(self, text: str) -> List[TextChunk]:
-        """分割文本"""
-        raise NotImplementedError
-
-
-class RecursiveTextSplitter(TextSplitter):
-    """
-    递归文本分片器
-    按照多级分隔符递归切分，优先保持语义完整性
-    """
-    
-    def __init__(
-        self,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50,
-        separators: Optional[List[str]] = None,
-    ):
-        super().__init__(chunk_size, chunk_overlap)
-        self.separators = separators or [
+        
+        # 兼容旧配置的分隔符列表
+        self.separators = [
             "\n\n",   # 段落
             "\n",     # 行
             "。",     # 中文句号
@@ -71,19 +62,34 @@ class RecursiveTextSplitter(TextSplitter):
         ]
     
     def split(self, text: str) -> List[TextChunk]:
-        """递归分割文本"""
-        chunks = self._recursive_split(text, self.separators)
-        
-        # 合并小块
-        merged_chunks = self._merge_small_chunks(chunks)
-        
-        # 构建TextChunk对象
+        """分割文本"""
+        raise NotImplementedError
+
+    def _convert_to_chunks(self, text: str, chunks_text: List[str]) -> List[TextChunk]:
+        """
+        将文本列表转换为带位置信息的TextChunk列表
+        注意：LangChain不直接返回位置信息，我们需要根据原文重新定位
+        """
         result = []
         current_pos = 0
-        for i, chunk_text in enumerate(merged_chunks):
+        
+        for i, chunk_text in enumerate(chunks_text):
+            # 在当前位置之后查找该片段
+            # 注意：由于可能会有重叠，或者分片器可能会修改空白字符，
+            # 这种简单的find可能在边缘情况下不完美，但对于大多数情况足够
             start_pos = text.find(chunk_text, current_pos)
+            
+            # 如果没找到（可能是分片器做了一些微调，如去除首尾空格）
             if start_pos == -1:
+                # 尝试从头搜索（防止乱序但不太可能）或模糊匹配
+                # 这里简单处理：如果找不到，就重置搜索起点（可能会有误判，但保证能找到）
+                start_pos = text.find(chunk_text)
+                
+            if start_pos == -1:
+                # 实在找不到，记录错误但不因中断，使用上一个结束位置
+                logger.warning(f"无法在原文中定位切片: {chunk_text[:20]}...")
                 start_pos = current_pos
+            
             end_pos = start_pos + len(chunk_text)
             
             result.append(TextChunk(
@@ -92,98 +98,65 @@ class RecursiveTextSplitter(TextSplitter):
                 start_pos=start_pos,
                 end_pos=end_pos,
             ))
-            current_pos = start_pos + 1
-        
-        logger.debug(f"文本分片完成: 原文{len(text)}字符, 生成{len(result)}个分片")
-        return result
-    
-    def _recursive_split(self, text: str, separators: List[str]) -> List[str]:
-        """递归分割"""
-        if not text:
-            return []
-        
-        # 如果文本已经足够短
-        if len(text) <= self.chunk_size:
-            return [text]
-        
-        # 尝试用第一个分隔符切分
-        if not separators:
-            # 没有分隔符了，强制按长度切分
-            return self._split_by_length(text)
-        
-        separator = separators[0]
-        remaining_separators = separators[1:]
-        
-        if separator:
-            parts = text.split(separator)
-        else:
-            # 空分隔符，按字符切分
-            parts = list(text)
-        
-        result = []
-        current_chunk = ""
-        
-        for part in parts:
-            # 如果当前块加上新部分不超过限制
-            test_chunk = current_chunk + separator + part if current_chunk else part
             
-            if len(test_chunk) <= self.chunk_size:
-                current_chunk = test_chunk
-            else:
-                # 保存当前块
-                if current_chunk:
-                    result.append(current_chunk)
-                
-                # 如果单个部分就超过限制，需要进一步切分
-                if len(part) > self.chunk_size:
-                    sub_chunks = self._recursive_split(part, remaining_separators)
-                    result.extend(sub_chunks)
-                    current_chunk = ""
-                else:
-                    current_chunk = part
-        
-        # 添加最后一块
-        if current_chunk:
-            result.append(current_chunk)
-        
+            # 更新下一次搜索的起始位置
+            # 注意需要回退 overlap 的长度，但 LangChain 可能已经处理了
+            # 为了保险，我们只保证单调递增，或者设为 start_pos + 1
+            # 但考虑到 overlap，其实下一次可能在当前 chunk 内部
+            # 所以最好的策略是：下次搜索至少从当前 start_pos + 1 开始
+            current_pos = start_pos + 1
+            
         return result
+
+
+class RecursiveTextSplitter(TextSplitter):
+    """
+    基于 LangChain 的递归文本分片器
+    支持 tiktoken 长度计算
+    """
     
-    def _split_by_length(self, text: str) -> List[str]:
-        """按长度切分"""
-        result = []
-        for i in range(0, len(text), self.chunk_size - self.chunk_overlap):
-            chunk = text[i:i + self.chunk_size]
-            if chunk:
-                result.append(chunk)
-        return result
+    def __init__(
+        self,
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+        separators: Optional[List[str]] = None,
+    ):
+        super().__init__(chunk_size, chunk_overlap)
+        self.separators = separators or self.separators
+        
+        # 初始化 LangChain 分片器
+        try:
+            self.lc_splitter = LCRecursiveSplitter.from_tiktoken_encoder(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                encoding_name="cl100k_base", # OpenAI default
+                separators=self.separators,
+                keep_separator=True
+            )
+            logger.info("已启用 TikToken 增强的分片器")
+        except Exception as e:
+            logger.warning(f"TikToken 初始化失败，回退到普通字符计算: {e}")
+            self.lc_splitter = LCRecursiveSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separators=self.separators,
+                keep_separator=True
+            )
     
-    def _merge_small_chunks(self, chunks: List[str]) -> List[str]:
-        """合并过小的块"""
-        if not chunks:
-            return []
+    def split(self, text: str) -> List[TextChunk]:
+        """使用 LangChain 进行切分"""
+        # LangChain 返回的是 Document 对象或 string List
+        chunks_text = self.lc_splitter.split_text(text)
         
-        min_chunk_size = self.chunk_size // 4  # 小于四分之一的考虑合并
-        result = []
-        current_chunk = ""
+        logger.debug(f"LangChain 分片完成: 原文{len(text)}字符, 生成{len(chunks_text)}个分片")
         
-        for chunk in chunks:
-            if len(current_chunk) + len(chunk) <= self.chunk_size:
-                current_chunk = current_chunk + "\n" + chunk if current_chunk else chunk
-            else:
-                if current_chunk:
-                    result.append(current_chunk)
-                current_chunk = chunk
-        
-        if current_chunk:
-            result.append(current_chunk)
-        
-        return result
+        # 转换为内部 TextChunk 对象并计算位置
+        return self._convert_to_chunks(text, chunks_text)
 
 
 class MarkdownSplitter(TextSplitter):
     """
-    Markdown文档分片器
-    按标题层级切分，保持文档结构
+    基于 LangChain 的 Markdown 分片器
     """
     
     def __init__(
@@ -192,128 +165,78 @@ class MarkdownSplitter(TextSplitter):
         chunk_overlap: int = 100,
     ):
         super().__init__(chunk_size, chunk_overlap)
-        self.header_pattern = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+        
+        # 定义 Header 映射
+        self.headers_to_split_on = [
+            ("#", "Header 1"),
+            ("##", "Header 2"),
+            ("###", "Header 3"),
+            ("####", "Header 4"),
+        ]
+        
+        self.markdown_splitter = LCMarkdownSplitter(
+            headers_to_split_on=self.headers_to_split_on
+        )
+        
+        # 用于再次切分长片段的递归分片器
+        self.recursive_splitter = RecursiveTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
+        )
     
     def split(self, text: str) -> List[TextChunk]:
         """按Markdown标题切分"""
-        # 找到所有标题
-        headers = list(self.header_pattern.finditer(text))
+        # 第一步：按 Header 切分
+        md_docs = self.markdown_splitter.split_text(text)
         
-        if not headers:
-            # 没有标题，使用普通分片
-            splitter = RecursiveTextSplitter(self.chunk_size, self.chunk_overlap)
-            return splitter.split(text)
+        final_chunks_text = []
+        md_metadatas = []
         
-        sections = []
-        for i, match in enumerate(headers):
-            level = len(match.group(1))
-            title = match.group(2)
-            start = match.start()
-            end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
-            content = text[start:end].strip()
+        # 第二步：检查长度并二次切分
+        for doc in md_docs:
+            content = doc.page_content
+            metadata = doc.metadata
             
-            sections.append({
-                "level": level,
-                "title": title,
-                "content": content,
-                "start": start,
-                "end": end,
-            })
-        
-        # 如果section太长，进一步切分
-        result = []
-        for section in sections:
-            if len(section["content"]) <= self.chunk_size:
-                result.append(TextChunk(
-                    content=section["content"],
-                    index=len(result),
-                    start_pos=section["start"],
-                    end_pos=section["end"],
-                    metadata={
-                        "title": section["title"],
-                        "level": section["level"],
-                    }
-                ))
+            # 如果片段过长，递归切分
+            # 注意：这里我们简单判断字符长度，也可以用 token
+            if len(content) > self.chunk_size:
+                sub_chunks = self.recursive_splitter.split(content)
+                for sub in sub_chunks:
+                    final_chunks_text.append(sub.content)
+                    # 合并 metadata
+                    md_metadatas.append({**metadata, **sub.metadata})
             else:
-                # 切分长section
-                splitter = RecursiveTextSplitter(self.chunk_size, self.chunk_overlap)
-                sub_chunks = splitter.split(section["content"])
-                for i, chunk in enumerate(sub_chunks):
-                    chunk.metadata["title"] = section["title"]
-                    chunk.metadata["level"] = section["level"]
-                    chunk.metadata["part"] = i + 1
-                    chunk.index = len(result)
-                    result.append(chunk)
+                final_chunks_text.append(content)
+                md_metadatas.append(metadata)
         
-        return result
+        # 第三步：计算位置并组装结果
+        chunks = self._convert_to_chunks(text, final_chunks_text)
+        
+        # 补充 metadata
+        for chunk, metadata in zip(chunks, md_metadatas):
+            chunk.metadata.update(metadata)
+            
+        return chunks
 
 
-class SentenceSplitter(TextSplitter):
+class SentenceSplitter(RecursiveTextSplitter):
     """
     句子级分片器
-    按句子边界切分，适合需要精确语义的场景
+    复用 RecursiveTextSplitter，但分隔符优先级调整
     """
     
     def __init__(
         self,
         chunk_size: int = 500,
-        chunk_overlap: int = 1,  # overlap用句子数表示
+        chunk_overlap: int = 50,  # 注意：这里单位统一回字符/token
     ):
-        super().__init__(chunk_size, chunk_overlap)
-        self.sentence_endings = re.compile(r'[。！？.!?\n]+')
-    
-    def split(self, text: str) -> List[TextChunk]:
-        """按句子切分"""
-        # 切分成句子
-        sentences = self.sentence_endings.split(text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if not sentences:
-            return []
-        
-        result = []
-        current_chunk = []
-        current_length = 0
-        current_start = 0
-        
-        for sentence in sentences:
-            if current_length + len(sentence) <= self.chunk_size:
-                current_chunk.append(sentence)
-                current_length += len(sentence) + 1  # +1 for separator
-            else:
-                # 保存当前块
-                if current_chunk:
-                    chunk_text = "。".join(current_chunk) + "。"
-                    result.append(TextChunk(
-                        content=chunk_text,
-                        index=len(result),
-                        start_pos=current_start,
-                        end_pos=current_start + len(chunk_text),
-                    ))
-                    current_start += len(chunk_text)
-                
-                # 开始新块（带overlap）
-                if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
-                    current_chunk = current_chunk[-self.chunk_overlap:]
-                    current_length = sum(len(s) + 1 for s in current_chunk)
-                else:
-                    current_chunk = []
-                    current_length = 0
-                
-                current_chunk.append(sentence)
-                current_length += len(sentence) + 1
-        
-        # 添加最后一块
-        if current_chunk:
-            chunk_text = "。".join(current_chunk) + "。"
-            result.append(TextChunk(
-                content=chunk_text,
-                index=len(result),
-                start_pos=current_start,
-                end_pos=current_start + len(chunk_text),
-            ))
-        
-        return result
+        # 优先使用断句符号
+        separators = ["\n\n", "。", "！", "？", ".", "!", "?", "\n"]
+        super().__init__(
+            chunk_size=chunk_size, 
+            chunk_overlap=chunk_overlap,
+            separators=separators
+        )
 
 
 def create_splitter(

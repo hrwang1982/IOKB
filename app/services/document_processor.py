@@ -216,6 +216,22 @@ async def process_document_task(doc_id: int, kb_id: int, file_path: str):
     可以被后台任务或消息队列调用
     """
     try:
+        # 重试机制：等待文档记录被提交
+        # 此时事务可能尚未提交，先轮询数据库检查文档是否存在
+        async with get_session_context() as session:
+            for i in range(10): # 最多等待5秒
+                result = await session.execute(
+                    select(Document).where(Document.id == doc_id)
+                )
+                if result.scalar_one_or_none():
+                    # 文档已存在，跳出等待，开始处理
+                    break
+                # 文档还没查到，等待一下
+                if i < 9: # 最后一次不sleep直接去尝试处理（或者报错）
+                    await asyncio.sleep(0.5)
+        
+        # 文档应该已可见，调用处理逻辑
         await document_processor.process_document(doc_id, kb_id, file_path)
+            
     except Exception as e:
         logger.error(f"文档处理任务失败: doc_id={doc_id}, error={e}")
