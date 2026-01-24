@@ -124,10 +124,18 @@ class Settings(BaseSettings):
     ocr_api_base: str = ""
     ocr_local_url: str = ""  # 本地部署URL，如 http://localhost:8083/ocr
     
+    # ASR 语音识别配置
+    asr_provider: str = "aliyun"  # aliyun, local, custom
+    asr_deploy_mode: str = "api"  # api: 调用API, local: 本地部署
+    asr_model_name: str = "paraformer-v2"  # aliyun: paraformer-v2, openai: whisper-1, local: fun-asr-mtl
+    asr_api_key: str = ""
+    asr_api_base: str = ""
+    asr_local_url: str = ""  # 本地部署URL
+
     # 多模态VL模型配置（图片理解/视频分析）
     vl_provider: str = "aliyun"  # aliyun, openai, local, custom
     vl_deploy_mode: str = "api"  # api: 调用API, local: 本地部署
-    vl_model_name: str = "qwen-vl-max"  # 阿里云: qwen-vl-max/qwen-vl-plus, OpenAI: gpt-4o
+    vl_model_name: str = "qwen-vl-max"  # 阿里云: qwen-vl-max/qwen-vl-plus/qwen3-vl-flash
     vl_api_key: str = ""  # 留空则使用llm_api_key
     vl_api_base: str = ""  # 留空则使用对应provider默认值
     vl_local_url: str = ""  # 本地部署URL

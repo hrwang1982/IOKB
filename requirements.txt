@@ -40,7 +40,8 @@ python-multipart>=0.0.6
 # paddleocr>=2.7.0
 
 # Multimodal (Image & Video)
-opencv-python>=4.8.0
+opencv-python-headless>=4.8.0
+dashscope>=1.14.0
 pillow>=10.0.0
 
 # Vector embedding

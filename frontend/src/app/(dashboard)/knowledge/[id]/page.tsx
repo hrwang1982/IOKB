@@ -483,7 +483,7 @@ export default function KnowledgeDetailPage() {
                             <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                             <p className="text-foreground mb-2">拖拽文件到此处上传</p>
                             <p className="text-sm text-muted-foreground mb-4">
-                                支持 PDF、Word、Excel、Markdown、图片等格式
+                                支持 PDF、Word、Excel、Markdown、图片、音频、视频等格式
                             </p>
                             <button
                                 type="button"
@@ -500,7 +500,7 @@ export default function KnowledgeDetailPage() {
                                 type="file"
                                 multiple
                                 className="hidden"
-                                accept=".pdf,.doc,.docx,.xls,.xlsx,.md,.txt,.png,.jpg,.jpeg"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.md,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a,.flac,.aac,.mp4,.avi,.mov,.mkv,.wmv,.flv"
                                 onChange={handleFileSelect}
                             />
                         </div>

@@ -35,6 +35,9 @@ const fileIcons: Record<string, typeof File> = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': FileSpreadsheet,
     'image/png': FileImage,
     'image/jpeg': FileImage,
+    'audio/mpeg': File,
+    'audio/wav': File,
+    'video/mp4': File,
 };
 
 function formatFileSize(bytes: number): string {
@@ -172,11 +175,11 @@ export default function UploadPage({ params }: { params: { id: string } }) {
                             multiple
                             className="hidden"
                             onChange={handleFileSelect}
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.md,.txt,.png,.jpg,.jpeg"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.md,.txt,.png,.jpg,.jpeg,.mp3,.wav,.m4a,.flac,.aac,.mp4,.avi,.mov,.mkv,.wmv,.flv"
                         />
                     </label>
                     <p className="text-xs text-muted-foreground mt-4">
-                        支持格式: PDF、Word、Excel、Markdown、TXT、图片 (单文件最大 50MB)
+                        支持格式: PDF、Word、Excel、Markdown、TXT、图片、音频、视频 (单文件最大 50MB)
                     </p>
                 </div>
             </div>

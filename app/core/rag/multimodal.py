@@ -7,6 +7,7 @@ import base64
 import io
 import os
 import tempfile
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -340,12 +341,97 @@ class VideoContentExtractor:
         return "\n\n".join(parts)
 
 
+class ASRService:
+    """ASR语音识别服务"""
+    
+    def __init__(self):
+        self.api_key = settings.asr_api_key or settings.llm_api_key
+        self.model_name = settings.asr_model_name
+        self.provider = settings.asr_provider
+    
+    async def transcribe(self, audio_path: str) -> str:
+        """转写音频文件"""
+        if self.provider == "aliyun":
+            return await self._transcribe_aliyun(audio_path)
+        # TODO: 支持其他 provider
+        return await self._transcribe_aliyun(audio_path)
+    
+    async def _transcribe_aliyun(self, audio_path: str) -> str:
+        """使用阿里云 DashScope 进行转写"""
+        import dashscope
+        from http import HTTPStatus
+        
+        dashscope.api_key = self.api_key
+        
+        try:
+            # 这里的调用通常是同步阻塞的，需放入 executor
+            loop = asyncio.get_running_loop()
+            
+            def _run_recognition():
+                abs_audio_path = os.path.abspath(audio_path)
+                file_ext = Path(abs_audio_path).suffix.lstrip('.')
+                
+                # Fix: Override invalid local model name for Aliyun Cloud API
+                # fun-asr-mtl is for local deployment, not supported by public API
+                real_model_name = self.model_name
+                if self.model_name == "fun-asr-mtl":
+                    logger.warning(f"检测到本地模型名称 {self.model_name}，但在使用云端API。自动切换为 paraformer-realtime-v2")
+                    real_model_name = "paraformer-realtime-v2"
+                
+                logger.debug(f"[ASR DEBUG] Using Recognition.call with file: {abs_audio_path}, model: {real_model_name}")
+                
+                # Recognition __init__ requires: model, callback, format, sample_rate
+                # callback=None is accepted based on logs
+                recognizer = dashscope.audio.asr.Recognition(
+                    model=real_model_name,
+                    format=file_ext,
+                    sample_rate=16000, # Default to 16k
+                    callback=None
+                )
+                
+                # Do NOT pass model/format again to call(), it causes "multiple values" error
+                response = recognizer.call(
+                    file=abs_audio_path
+                )
+                
+                logger.debug(f"[ASR DEBUG] Recognition Response: {response}")
+                
+                if response.status_code == HTTPStatus.OK:
+                    return response.output
+                else:
+                    raise RuntimeError(f"ASR Recognition Failed: {response.code} {response.message}")
+
+            response = await loop.run_in_executor(None, _run_recognition)
+            
+            if response:
+                # Recognition response parsing
+                text = ""
+                if "sentences" in response:
+                    for sentence in response["sentences"]:
+                        text += sentence.get("text", "")
+                elif "text" in response: 
+                    text += response["text"]
+                elif hasattr(response, "text") and response.text:
+                    text += response.text
+                
+                logger.debug(f"[ASR DEBUG] Extracted Text: {text}")
+                return text
+            else:
+                logger.warning(f"ASR返回空响应: {response}")
+                return ""
+                
+        except Exception as e:
+            logger.error(f"ASR转写异常: {e}")
+            raise
+
+
 class MultimodalService:
     """多模态服务管理"""
     
     def __init__(self):
         self._image_model: Optional[BaseImageUnderstanding] = None
         self._video_extractor: Optional[VideoContentExtractor] = None
+        self._asr_service: Optional[ASRService] = None
     
     def get_image_model(self) -> BaseImageUnderstanding:
         """获取图片理解模型"""
@@ -383,6 +469,12 @@ class MultimodalService:
         logger.info(f"创建图片理解模型: provider={provider}, deploy_mode={deploy_mode}, model={model_name}")
         return self._image_model
     
+    def get_asr_service(self) -> ASRService:
+        """获取ASR服务"""
+        if self._asr_service is None:
+            self._asr_service = ASRService()
+        return self._asr_service
+
     def get_video_extractor(self) -> VideoContentExtractor:
         """获取视频提取器"""
         if self._video_extractor is None:
@@ -401,10 +493,56 @@ class MultimodalService:
         model = self.get_image_model()
         return await model.understand_bytes(image_bytes)
     
+    async def transcribe_audio(self, audio_path: str) -> str:
+        """转写音频"""
+        asr = self.get_asr_service()
+        return await asr.transcribe(audio_path)
+
     async def extract_video_content(self, video_path: str) -> VideoContentResult:
-        """提取视频内容"""
+        """提取视频内容（包含视觉理解和语音转写）"""
         extractor = self.get_video_extractor()
-        return await extractor.extract(video_path)
+        
+        # 1. 提取视觉内容
+        video_result = await extractor.extract(video_path)
+        
+        # 2. 提取并转写语音
+        try:
+            # 使用 moviepy 提取音频临时文件
+            import moviepy.editor as mp
+            
+            temp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            temp_audio.close()
+            
+            # 由于可能没有安装 moviepy，我们需要做好异常处理
+            # 并且 moviepy 依赖 ffmpeg
+            
+            # 使用 run_in_executor 运行音频提取
+            def _extract_audio():
+                clip = mp.VideoFileClip(video_path)
+                if clip.audio:
+                    clip.audio.write_audiofile(temp_audio.name, logger=None)
+                    return True
+                return False
+
+            loop = asyncio.get_running_loop()
+            has_audio = await loop.run_in_executor(None, _extract_audio)
+            
+            if has_audio:
+                logger.info(f"视频音频已提取: {temp_audio.name}")
+                transcription = await self.transcribe_audio(temp_audio.name)
+                video_result.transcription = transcription
+            
+            # 清理临时文件
+            os.unlink(temp_audio.name)
+                
+        except ImportError:
+            logger.warning("未安装 moviepy，跳过视频语音转写")
+        except Exception as e:
+            logger.warning(f"视频语音转写失败: {e}")
+            if os.path.exists(temp_audio.name):
+                os.unlink(temp_audio.name)
+        
+        return video_result
     
     async def process_file(self, file_path: str) -> Dict[str, Any]:
         """
@@ -414,7 +552,7 @@ class MultimodalService:
         ext = Path(file_path).suffix.lower()
         
         # 图片类型
-        if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
+        if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.tiff']:
             result = await self.understand_image(file_path)
             return {
                 "type": "image",
@@ -426,12 +564,23 @@ class MultimodalService:
         # 视频类型
         elif ext in ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv']:
             result = await self.extract_video_content(file_path)
+            # 合并描述和语音文本
+            full_text = f"{result.description}\n\n[语音转写]\n{result.transcription or '无语音内容'}"
             return {
                 "type": "video",
-                "description": result.description,
+                "description": full_text,  # 为了兼容 parser 接口，这里放全部内容
                 "duration": result.duration,
                 "transcription": result.transcription,
                 "metadata": result.metadata,
+            }
+        
+        # 音频类型
+        elif ext in ['.mp3', '.wav', '.m4a', '.flac', '.aac']:
+            transcription = await self.transcribe_audio(file_path)
+            return {
+                "type": "audio",
+                "description": transcription,
+                "metadata": {"file_type": "audio"},
             }
         
         else:
