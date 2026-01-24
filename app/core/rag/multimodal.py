@@ -409,6 +409,9 @@ class ASRService:
                 if "sentences" in response:
                     for sentence in response["sentences"]:
                         text += sentence.get("text", "")
+                elif "sentence" in response: 
+                    for sentence in response["sentence"]:
+                        text += sentence.get("text", "")
                 elif "text" in response: 
                     text += response["text"]
                 elif hasattr(response, "text") and response.text:
