@@ -118,6 +118,7 @@ class Settings(BaseSettings):
     # OCR 配置
     ocr_provider: str = "paddleocr"  # paddleocr, paddleocr_vl, aliyun, baidu, local, custom
     ocr_deploy_mode: str = "local"  # api: 调用API, local: 本地部署
+    ocr_model_name: str = ""  # 模型名称，如 qwen-vl-ocr
     ocr_model_path: str = ""  # 本地模型路径
     ocr_api_key: str = ""
     ocr_api_base: str = ""

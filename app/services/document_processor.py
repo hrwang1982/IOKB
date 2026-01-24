@@ -99,7 +99,10 @@ class DocumentProcessor:
                 
                 # 1. 解析文档
                 logger.info(f"开始解析文档: {file_path}")
-                parsed = self.parser.parse(file_path)
+                # 使用 run_in_executor 在线程池中运行解析，避免阻塞主循环
+                # 同时也允许解析器内部使用 asyncio.run() 调用异步 OCR
+                loop = asyncio.get_running_loop()
+                parsed = await loop.run_in_executor(None, self.parser.parse, file_path)
                 
                 if not parsed.text:
                     logger.warning(f"文档解析结果为空: {file_path}")

@@ -80,6 +80,8 @@ class PDFParser(BaseParser):
         """解析PDF文件"""
         try:
             import fitz  # PyMuPDF
+            from app.core.rag.ocr import ocr_service
+            import asyncio
             
             doc = fitz.open(file_path)
             pages = []
@@ -87,26 +89,95 @@ class PDFParser(BaseParser):
             tables = []
             images = []
             
+            # 辅助函数：安全运行异步OCR
+            def run_ocr_sync(img_bytes):
+                try:
+                    # 尝试获取当前事件循环
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # 如果已经在运行中，这通常意味着我们在一个 async 函数中
+                        # 但 BaseParser.parse 是同步定义的。
+                        # 这确实是一个架构上的挑战。
+                        # 正确的做法是重构 parser 为 async，或者使用 concurrent.futures
+                        # 这里我们假设 parse 是在线程池中运行的（如果调用方使用了 run_in_executor）
+                        # 或者我们接受这里会报错，需要重构调用方。
+                        
+                        # 但考虑到 document_processor 中是直接调用的：
+                        # parsed = self.parser.parse(file_path)
+                        # 这是在 async def process_document 中直接调用同步函数，会阻塞 loop。
+                        # 强烈建议将 parser.parse 改为 async，但为了兼容现有的 BaseParser 接口
+                        # 我们只能 hack 或者让调用方去 run_in_executor。
+                        
+                        # 暂时方案：这里不进行 OCR，或者只在非 async 环境 OCR？
+                        # 不，用户需要 OCR。
+                        # 我们假设 document_processor 会被修改为 run_in_executor 调用 parse
+                        # 那么这里的 thread 就没有 running loop。
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(asyncio.run, ocr_service.recognize_bytes(img_bytes))
+                            return future.result()
+                    else:
+                        return asyncio.run(ocr_service.recognize_bytes(img_bytes))
+                except RuntimeError:
+                    # Fallback
+                    return asyncio.run(ocr_service.recognize_bytes(img_bytes))
+
             for page_num, page in enumerate(doc):
-                # 提取文本
+                # 1. 提取基础文本
                 page_text = page.get_text()
-                full_text.append(page_text)
+                
+                # 2. 提取并OCR图片
+                ocr_text_parts = []
+                image_list = page.get_images()
+                for img_index, img in enumerate(image_list):
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    
+                    try:
+                        # 只有当图片较大时才尝试OCR，忽略小图标
+                        if len(image_bytes) > 1024: 
+                            # 注意：这里我们简单使用 asyncio.run，但这在已有 loop 的线程中会报错
+                            # 考虑到 process_document 是 async 的，它持有一个 loop
+                            # 所以这里必须非常小心。
+                            # 
+                            # 经过深思熟虑，要在同步函数中调用异步代码且该同步函数由异步函数直接调用：
+                            # 唯一的办法是重构 BaseParser 为 async def parse(...)
+                            # 既然这次任务允许修改 parser.py，我有两个选择：
+                            # A. 修改 parser.py 及其调用处为 async (最佳，但改动大)
+                            # B. 使用 Nest_Asyncio (简单，但引入依赖)
+                            # C. 忽略 OCR (不行)
+                            
+                            # 选择 A 的变种：我们先不在此处真正 await，而是收集 task？不行，接口是返回 ParsedContent
+                            
+                            # 让我们先写 asyncio.run()。并在 document_processor.py 中
+                            # 把 parser.parse 放到 thread pool 中运行。
+                            # 这样 parser 就在一个独立的线程中，没有主 loop，asyncio.run() 可以正常工作。
+                            
+                            # 临时使用 asyncio.run()，后续步骤修改 document_processor.py
+                            ocr_result = asyncio.run(ocr_service.recognize_bytes(image_bytes))
+                            if ocr_result.text.strip():
+                                ocr_text_parts.append(f"\n[与图片相关的文字(OCR)]: {ocr_result.text}\n")
+                                
+                            images.append({
+                                "page": page_num + 1,
+                                "index": img_index,
+                                "xref": xref,
+                                "ocr_text": ocr_result.text
+                            })
+                    except Exception as e:
+                        logger.warning(f"PDF图片OCR失败 (Page {page_num+1}, Img {img_index}): {e}")
+
+                # 合并文本
+                combined_text = page_text + "".join(ocr_text_parts)
+                full_text.append(combined_text)
                 
                 pages.append({
                     "page_num": page_num + 1,
-                    "text": page_text,
+                    "text": combined_text,
                     "width": page.rect.width,
                     "height": page.rect.height,
                 })
-                
-                # 提取图片信息
-                image_list = page.get_images()
-                for img_index, img in enumerate(image_list):
-                    images.append({
-                        "page": page_num + 1,
-                        "index": img_index,
-                        "xref": img[0],
-                    })
             
             doc.close()
             
@@ -115,6 +186,7 @@ class PDFParser(BaseParser):
                 "file_type": "pdf",
                 "page_count": len(pages),
                 "image_count": len(images),
+                "ocr_enabled": True
             }
             
             return ParsedContent(
@@ -387,6 +459,105 @@ class HTMLParser(BaseParser):
             raise
 
 
+class ImageParser(BaseParser):
+    """图片解析器（OCR）"""
+    
+    def supports(self, file_type: FileType) -> bool:
+        return file_type in [
+            FileType.PNG, FileType.JPG, FileType.JPEG,
+            FileType.TIFF, FileType.BMP
+        ]
+    
+    def parse(self, file_path: str) -> ParsedContent:
+        """解析图片文件"""
+        try:
+            from app.core.rag.ocr import ocr_service
+            import asyncio
+            
+            # 由于parse通常是在同步上下文中调用，但ocr_service是异步的
+            # 这里我们需要用asyncio.run或者获取当前loop来执行
+            # 注意：如果当前已经在loop中，不能用run，需要check
+            
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            if loop.is_running():
+                # 如果已经在运行的loop中（例如FastAPI请求处理中），且parse被同步调用
+                # 这会比较棘手。通常 parser.parse 应该被设计为 async 或者在 threadpool 中运行
+                # 查看 document_processor.py，parse 是同步调用的: parsed = self.parser.parse(file_path)
+                # 而 process_document 是 async 的。
+                # 最佳实践是将 parse 改为 async，但那是大改动。
+                # 兼容方案：使用 image_path 调用同步封装（如果 ocr_service 支持）
+                # 但 ocr_service 只有 async 方法。
+                # 临时方案：在 document_processor 中尽量把 parse 放到 executor 中运行，或者在这里阻塞等待
+                # 但在 async loop 中阻塞等待 async 函数是不行的。
+                
+                # 考虑到 process_document 是 async函数，却调用了同步的 parser.parse
+                # 我们可以尝试用 nest_asyncio，或者假设 parser 运行在线程池中
+                # 让我们看看 document_processor.py 的调用方式
+                pass
+
+            # 简化处理：由于 sync over async 的复杂性，我们假设 parse 运行在允许阻塞的环境
+            # 或者我们在这里直接使用 httpx.Client (同步) 而不是 ocr_service (异步 httpx.AsyncClient)?
+            # 不，最好复用 ocr_service。
+            
+            # 使用简单的 loop.run_until_complete() 在非 async 线程中通常没问题
+            # 如果当前线程有运行中的 loop，则会报错 RuntimeError
+            
+            # 让我们尝试一种通过 creating new loop 的方式，但这在主线程会失败
+            
+            # 更好的方案：修改 DocumentParser 和 BaseParser 为 async
+            # 但这影响太大。
+            
+            # 妥协方案：在 ImageParser 中临时使用同步调用，或者在此处 hack async
+            # 让我们看看 ocr.py，它确实只提供了 async 方法。
+            
+            # 鉴于 parse 方法目前是同步接口，我们必须在此处同步等待结果。
+            # 为了避免 loop 冲突，我们使用一个新的 loop 运行
+            # 但如果是在 FastAPI 的路径操作函数中直接调用，这会阻塞主 loop。
+            # 幸好 document_processor.py 中 process_document 是 async def，
+            # 调用 parser.parse 时是同步调用。如果 parser.parse 耗时久（如OCR），会阻塞整个 loop。
+            # 这是一个架构缺陷。
+            
+            # 修正方案：
+            # 既然 process_document 已经是 async 的，我们应该修改 BaseParser.parse 为 async parse
+            # 或者让 parse 内部使用 sync 版本的 OCR。
+            
+            # 为了不进行大重构，我会在 ImageParser 中实现一个同步的 run_ocr 辅助函数
+            # 或者，更简单地，使用 nest_asyncio（如果环境允许）
+            # 或者，检测 loop 状态
+            
+            result = asyncio.run(ocr_service.recognize(file_path))
+            
+            metadata = {
+                "file_path": file_path,
+                "file_type": "image",
+                "ocr_model": result.metadata.get("model", "") if result.metadata else "",
+            }
+            
+            return ParsedContent(
+                text=result.text,
+                metadata=metadata,
+                images=[{
+                    "path": file_path,
+                    "confidence": result.confidence,
+                    "boxes": result.boxes
+                }]
+            )
+            
+        except RuntimeError as e:
+            # 如果是因为 loop 正在运行，尝试使用 nest_asyncio 或其他 tricky 方式
+            # 但最稳妥的是在 document_processor 中用 run_in_executor
+            logger.error(f"OCR解析失败(RuntimeError): {e}")
+            raise
+        except Exception as e:
+            logger.error(f"图片解析失败: {file_path}, 错误: {e}")
+            raise
+
+
 class DocumentParser:
     """文档解析服务"""
     
@@ -398,6 +569,7 @@ class DocumentParser:
             MarkdownParser(),
             TextParser(),
             HTMLParser(),
+            ImageParser(),  # 注册图片解析器
         ]
     
     def get_file_type(self, file_path: str) -> Optional[FileType]:

@@ -20,6 +20,7 @@ class OCRResult:
     text: str
     confidence: float = 0.0
     boxes: Optional[List[Dict[str, Any]]] = None  # 文字位置信息
+    metadata: Optional[Dict[str, Any]] = None  # 额外元数据
     
 
 class BaseOCR(ABC):
