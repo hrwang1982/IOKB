@@ -607,13 +607,28 @@ class VideoParser(BaseParser):
             # 使用 run_in_executor 避免 event loop 冲突
             # 注意：DocumentProcessor 已经在 executor 中运行此 parse 方法
             # 所以我们这里可以安全地创建一个新的 loop (因为是独立线程)
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
             
-            result = loop.run_until_complete(multimodal_service.extract_video_content(file_path))
+            # Fix: Always create a new loop to avoid "Event loop is closed" error
+            # if the thread was previously used by another task that closed its loop.
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                result = loop.run_until_complete(multimodal_service.extract_video_content(file_path))
+            finally:
+                try:
+                    # Cancel all running tasks
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    
+                    if pending:
+                        # Allow tasks to finish cancellation
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                        
+                    loop.close()
+                finally:
+                    asyncio.set_event_loop(None)  # Clean up to prevent affecting future tasks
             
             # 组合描述和语音
             full_text = f"# 视频内容分析\n\n{result.description}\n\n# 语音转写\n\n{result.transcription or '无语音内容'}"

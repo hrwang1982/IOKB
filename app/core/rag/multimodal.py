@@ -455,10 +455,15 @@ class MultimodalService:
                 model_name=model_name,
             )
         elif provider == "aliyun":
+            # Ensure we use the native API base for Aliyun provider
+            # The setting might be pointing to OpenAI compatible endpoint (compatible-mode/v1)
+            native_api_base = "https://dashscope.aliyuncs.com/api/v1"
+            use_base = api_base if api_base and "compatible-mode" not in api_base else native_api_base
+            
             self._image_model = AliyunVLModel(
                 api_key=api_key,
                 model_name=model_name,
-                api_base=api_base or "https://dashscope.aliyuncs.com/api/v1",
+                api_base=use_base,
             )
         elif provider == "openai":
             self._image_model = OpenAIVisionModel(
@@ -511,7 +516,15 @@ class MultimodalService:
         # 2. 提取并转写语音
         try:
             # 使用 moviepy 提取音频临时文件
-            import moviepy.editor as mp
+            # 兼容 moviepy v1.x 和 v2.x
+            try:
+                from moviepy import VideoFileClip
+            except ImportError:
+                try:
+                    import moviepy.editor as mp
+                    VideoFileClip = mp.VideoFileClip
+                except ImportError:
+                    raise ImportError("Could not import moviepy. Please install it with `pip install moviepy`")
             
             temp_audio = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
             temp_audio.close()
@@ -521,10 +534,18 @@ class MultimodalService:
             
             # 使用 run_in_executor 运行音频提取
             def _extract_audio():
-                clip = mp.VideoFileClip(video_path)
+                clip = VideoFileClip(video_path)
                 if clip.audio:
-                    clip.audio.write_audiofile(temp_audio.name, logger=None)
+                    # Fix: Force mono audio (nchannels=1) as some ASR models (like Paraformer) require it
+                    clip.audio.write_audiofile(
+                        temp_audio.name, 
+                        logger=None,
+                        nchannels=1, 
+                        codec='libmp3lame'
+                    )
+                    clip.close()  # V2.x best practice
                     return True
+                clip.close()
                 return False
 
             loop = asyncio.get_running_loop()
