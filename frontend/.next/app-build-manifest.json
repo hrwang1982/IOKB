@@ -56,6 +56,11 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(dashboard)/knowledge/qa/page.js"
     ],
+    "/(dashboard)/knowledge/search/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/knowledge/search/page.js"
+    ],
     "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
