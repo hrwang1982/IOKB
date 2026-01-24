@@ -537,10 +537,12 @@ class MultimodalService:
                 clip = VideoFileClip(video_path)
                 if clip.audio:
                     # Fix: Force mono audio (nchannels=1) as some ASR models (like Paraformer) require it
+                    # Note: write_audiofile does not have 'nchannels' param, must use ffmpeg_params
+                    # Also force sample rate to 16000Hz (required by ASR)
                     clip.audio.write_audiofile(
                         temp_audio.name, 
                         logger=None,
-                        nchannels=1, 
+                        ffmpeg_params=["-ac", "1", "-ar", "16000"],
                         codec='libmp3lame'
                     )
                     clip.close()  # V2.x best practice
