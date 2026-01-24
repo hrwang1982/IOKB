@@ -61,6 +61,26 @@
       "static/chunks/main-app.js",
       "static/chunks/app/(dashboard)/knowledge/search/page.js"
     ],
+    "/(dashboard)/alerts/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/alerts/page.js"
+    ],
+    "/(dashboard)/cmdb/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/cmdb/page.js"
+    ],
+    "/(dashboard)/cmdb/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/cmdb/[id]/page.js"
+    ],
+    "/(dashboard)/admin/users/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/admin/users/page.js"
+    ],
     "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

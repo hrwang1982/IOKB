@@ -146,7 +146,7 @@ export default function SearchPage() {
                             {results.map((result) => (
                                 <Link
                                     key={result.chunk_id}
-                                    href={`/knowledge/${result.document_id}/doc/${result.document_id}`}
+                                    href={`/knowledge/${result.kb_id}/doc/${result.document_id}`}
                                     className="block card p-4 hover:border-primary/50 transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-2">
@@ -160,8 +160,8 @@ export default function SearchPage() {
                                             {/* 相关度 */}
                                             <div className="flex items-center gap-1.5" title="相关度">
                                                 <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                                                    <div 
-                                                        className="h-full bg-primary transition-all" 
+                                                    <div
+                                                        className="h-full bg-primary transition-all"
                                                         style={{ width: `${result.score * 100}%` }}
                                                     />
                                                 </div>
@@ -169,7 +169,7 @@ export default function SearchPage() {
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
                                         {result.content}
                                     </p>

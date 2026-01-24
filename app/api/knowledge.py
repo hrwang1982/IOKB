@@ -70,6 +70,7 @@ class SearchResult(BaseModel):
     document_name: str
     content: str
     score: float
+    kb_id: Optional[int] = None
     metadata: Optional[dict] = None
 
 
@@ -697,6 +698,7 @@ async def search(
                 document_name=r.metadata.get("filename", "") if r.metadata else "",
                 content=r.content,
                 score=r.score,
+                kb_id=r.kb_id,
                 metadata=r.metadata,
             )
             for r in results
@@ -737,6 +739,7 @@ async def question_answer(
                     document_name=s.get("metadata", {}).get("filename", "未知文档") if isinstance(s.get("metadata"), dict) else "未知文档",
                     content=s.get("content", ""),
                     score=s.get("score", 0),
+                    kb_id=s.get("kb_id"),
                     metadata=s.get("metadata", {}),
                 )
                 for s in result.sources

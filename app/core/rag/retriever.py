@@ -22,6 +22,7 @@ class SearchResult:
     metadata: Dict[str, Any]
     document_id: Optional[int] = None
     chunk_index: Optional[int] = None
+    kb_id: Optional[int] = None
 
 
 class ElasticsearchRetriever:
@@ -287,6 +288,7 @@ class ElasticsearchRetriever:
                 index=",".join(indices),
                 body=query_body,
                 size=top_k,
+                ignore_unavailable=True,
             )
         except Exception as e:
             logger.error(f"搜索失败: {e}")
@@ -311,6 +313,7 @@ class ElasticsearchRetriever:
                 metadata=source.get("metadata", {}),
                 document_id=source.get("document_id"),
                 chunk_index=source.get("chunk_index"),
+                kb_id=source.get("kb_id"),
             ))
         
         logger.debug(f"检索完成: 返回{len(results)}条结果")
@@ -363,6 +366,7 @@ class ElasticsearchRetriever:
                 index=",".join(indices),
                 body=query_body,
                 size=top_k,
+                ignore_unavailable=True,
             )
         except Exception as e:
             # 如果RRF不支持，回退到普通搜索
@@ -381,6 +385,7 @@ class ElasticsearchRetriever:
                 metadata=source.get("metadata", {}),
                 document_id=source.get("document_id"),
                 chunk_index=source.get("chunk_index"),
+                kb_id=source.get("kb_id"),
             ))
         
         return results
