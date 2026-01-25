@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
     AlertTriangle,
@@ -12,57 +12,26 @@ import {
     Network,
     Server,
     Trash2,
+    Loader2,
+    Plus,
+    Search,
 } from 'lucide-react';
+import {
+    getCI,
+    updateCI,
+    getCIType,
+    getCIs,
+    getCIRelationships,
+    createCIRelationship,
+    deleteCIRelationship,
+    type CI,
+    type CIType,
+    type CIRelationship
+} from '@/lib/api';
+import { DynamicForm } from '@/components/DynamicForm';
 
-// 模拟配置项详情
-const ciDetail = {
-    id: 1,
-    name: 'server-prod-001',
-    typeCode: 'server',
-    typeName: '物理服务器',
-    identifier: 'SRV-001',
-    status: 'active',
-    attributes: {
-        ip: '192.168.1.100',
-        hostname: 'server-prod-001.example.com',
-        os: 'CentOS 7.9',
-        cpu: '32核',
-        memory: '128GB',
-        disk: '2TB SSD',
-        location: '数据中心A',
-        rack: 'A-01-05',
-    },
-    createdAt: '2026-01-01 10:00:00',
-    updatedAt: '2026-01-18 15:30:00',
-};
 
-// 关系配置项
-const relationships = {
-    upstream: [
-        { id: 10, name: 'router-core-001', type: '网络设备', relType: 'connects' },
-    ],
-    downstream: [
-        { id: 20, name: 'app-web-001', type: '应用服务', relType: 'runs_on' },
-        { id: 21, name: 'app-api-001', type: '应用服务', relType: 'runs_on' },
-        { id: 22, name: 'db-slave-001', type: '数据库', relType: 'backup' },
-    ],
-};
 
-// 关联告警
-const relatedAlerts = [
-    {
-        id: 'ALT-001',
-        title: 'CPU使用率超过90%',
-        level: 'critical',
-        time: '5分钟前',
-    },
-    {
-        id: 'ALT-002',
-        title: '内存使用率告警',
-        level: 'warning',
-        time: '1小时前',
-    },
-];
 
 const statusConfig = {
     active: { label: '运行中', className: 'bg-success/10 text-success' },
@@ -73,7 +42,163 @@ const statusConfig = {
 
 export default function CIDetailPage({ params }: { params: { id: string } }) {
     const [activeTab, setActiveTab] = useState<'attributes' | 'relationships' | 'alerts'>('attributes');
-    const status = statusConfig[ciDetail.status as keyof typeof statusConfig];
+    const [ci, setCi] = useState<CI | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // 编辑相关状态
+    const [isEditing, setIsEditing] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [ciType, setCiType] = useState<CIType | null>(null);
+    const [editingData, setEditingData] = useState<{
+        name: string;
+        status: string;
+        attributes: Record<string, any>;
+    }>({ name: '', status: '', attributes: {} });
+
+    // 关系数据
+    const [relationships, setRelationships] = useState<{ upstream: CIRelationship[], downstream: CIRelationship[] }>({ upstream: [], downstream: [] });
+    // 加载关系数据
+    useEffect(() => {
+        if (activeTab === 'relationships' && ci) {
+            getCIRelationships(ci.id)
+                .then(setRelationships)
+                .catch(err => console.error('Load rels failed', err));
+        }
+    }, [activeTab, ci]);
+
+    const handleDeleteRelationship = async (relId: number) => {
+        if (!confirm('确定删除此关系吗？')) return;
+        try {
+            await deleteCIRelationship(relId);
+            // 刷新
+            if (ci) {
+                const rels = await getCIRelationships(ci.id);
+                setRelationships(rels);
+            }
+        } catch (e) {
+            alert('删除失败');
+        }
+    };
+
+    // 添加关系相关状态
+    const [isAddRelOpen, setIsAddRelOpen] = useState(false);
+    const [relType, setRelType] = useState('depends_on');
+    const [targetSearch, setTargetSearch] = useState('');
+    const [targetResults, setTargetResults] = useState<CI[]>([]);
+    const [selectedTargetId, setSelectedTargetId] = useState<number | null>(null);
+    const [isSearching, setIsSearching] = useState(false);
+
+    // 搜索目标配置项
+    useEffect(() => {
+        if (!isAddRelOpen) return;
+        const timer = setTimeout(async () => {
+            if (targetSearch.trim()) {
+                setIsSearching(true);
+                try {
+                    const res = await getCIs({ keyword: targetSearch, size: 5 });
+                    // 排除自己
+                    setTargetResults(res.items.filter(item => item.id !== ci?.id));
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setIsSearching(false);
+                }
+            } else {
+                setTargetResults([]);
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [targetSearch, isAddRelOpen, ci?.id]);
+
+    const handleAddRelationship = async () => {
+        if (!selectedTargetId || !ci) return;
+        try {
+            await createCIRelationship({
+                from_ci_id: ci.id,
+                to_ci_id: selectedTargetId,
+                rel_type: relType
+            });
+            setIsAddRelOpen(false);
+            setTargetSearch('');
+            setSelectedTargetId(null);
+            // 刷新列表
+            const rels = await getCIRelationships(ci.id);
+            setRelationships(rels);
+        } catch (e) {
+            alert('添加关系失败: ' + (e as Error).message);
+        }
+    };
+
+    useEffect(() => {
+        async function loadCi() {
+            try {
+                const data = await getCI(parseInt(params.id));
+                setCi(data);
+
+                // 加载类型定义以获取Schema
+                try {
+                    const typeData = await getCIType(data.type_code);
+                    setCiType(typeData);
+                } catch (e) {
+                    console.error('Failed to load CI type schema', e);
+                }
+            } catch (err) {
+                setError((err as Error).message);
+            } finally {
+                setLoading(false);
+            }
+        }
+        loadCi();
+    }, [params.id]);
+
+    // 初始化编辑数据
+    useEffect(() => {
+        if (ci) {
+            setEditingData({
+                name: ci.name,
+                status: ci.status,
+                attributes: ci.attributes || {}
+            });
+        }
+    }, [ci]);
+
+    const handleUpdate = async () => {
+        if (!ci) return;
+        setIsSaving(true);
+        try {
+            const updated = await updateCI(ci.id, {
+                name: editingData.name,
+                status: editingData.status,
+                attributes: editingData.attributes
+            });
+            setCi(updated);
+            setIsEditing(false);
+        } catch (error) {
+            alert('更新失败: ' + (error as Error).message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (error || !ci) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+                <div className="text-error">{error || '配置项不存在'}</div>
+                <Link href="/cmdb" className="btn-primary">返回列表</Link>
+            </div>
+        );
+    }
+
+    const status = statusConfig[ci.status as keyof typeof statusConfig] || statusConfig.active;
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -84,7 +209,7 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                     配置项列表
                 </Link>
                 <ChevronRight className="h-4 w-4" />
-                <span className="text-foreground">{ciDetail.name}</span>
+                <span className="text-foreground">{ci.name}</span>
             </div>
 
             {/* 配置项标题栏 */}
@@ -96,7 +221,7 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                         </div>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h1 className="text-xl font-bold text-foreground">{ciDetail.name}</h1>
+                                <h1 className="text-xl font-bold text-foreground">{ci.name}</h1>
                                 <span
                                     className={`px-2.5 py-1 rounded-full text-xs font-medium ${status.className}`}
                                 >
@@ -104,9 +229,9 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                                 </span>
                             </div>
                             <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                                <span>类型: {ciDetail.typeName}</span>
-                                <span>标识: {ciDetail.identifier}</span>
-                                <span>创建于: {ciDetail.createdAt}</span>
+                                <span>类型: {ci.type_name || ci.type_code}</span>
+                                <span>标识: {ci.identifier}</span>
+                                <span>创建于: {ci.created_at ? new Date(ci.created_at).toLocaleString() : '-'}</span>
                             </div>
                         </div>
                     </div>
@@ -136,8 +261,8 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key as typeof activeTab)}
                                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === tab.key
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                                     }`}
                             >
                                 {tab.label}
@@ -150,12 +275,17 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                 {activeTab === 'attributes' && (
                     <div className="p-6">
                         <div className="grid grid-cols-2 gap-6">
-                            {Object.entries(ciDetail.attributes).map(([key, value]) => (
+                            {ci.attributes && Object.entries(ci.attributes).map(([key, value]) => (
                                 <div key={key} className="space-y-1">
                                     <label className="text-sm text-muted-foreground">{key}</label>
-                                    <div className="text-foreground font-medium">{value}</div>
+                                    <div className="text-foreground font-medium">{String(value)}</div>
                                 </div>
                             ))}
+                            {(!ci.attributes || Object.keys(ci.attributes).length === 0) && (
+                                <div className="col-span-2 text-center text-muted-foreground py-8">
+                                    暂无属性信息
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -163,59 +293,90 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                 {/* 关系拓扑 */}
                 {activeTab === 'relationships' && (
                     <div className="p-6 space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-medium">配置项关系</h3>
+                            <button
+                                onClick={() => setIsAddRelOpen(true)}
+                                className="btn-primary btn-sm flex items-center gap-2"
+                            >
+                                <Plus className="h-4 w-4" />
+                                添加关系
+                            </button>
+                        </div>
+
                         {/* 上游依赖 */}
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                                上游依赖 ({relationships.upstream.length})
+                                上游依赖 (被依赖) - {relationships.upstream.length}
                             </h3>
                             <div className="space-y-2">
-                                {relationships.upstream.map((rel) => (
-                                    <Link
+                                {relationships.upstream.length > 0 ? relationships.upstream.map((rel) => (
+                                    <div
                                         key={rel.id}
-                                        href={`/cmdb/${rel.id}`}
-                                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer"
+                                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 transition-colors"
                                     >
                                         <Network className="h-5 w-5 text-primary" />
                                         <div className="flex-1">
-                                            <div className="font-medium text-foreground">{rel.name}</div>
-                                            <div className="text-sm text-muted-foreground">{rel.type}</div>
+                                            <Link href={`/cmdb/${rel.from_ci_id}`} className="font-medium text-foreground hover:underline">
+                                                {rel.from_ci_name}
+                                            </Link>
+                                            <div className="text-sm text-muted-foreground">ID: {rel.from_ci_id}</div>
                                         </div>
                                         <div className="text-xs px-2 py-1 bg-muted rounded">
-                                            {rel.relType}
+                                            {rel.rel_type}
                                         </div>
-                                    </Link>
-                                ))}
+                                        <button
+                                            onClick={() => handleDeleteRelationship(rel.id)}
+                                            className="text-muted-foreground hover:text-error p-1"
+                                            title="删除关系"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )) : (
+                                    <div className="text-sm text-muted-foreground italic pl-2">无上游依赖</div>
+                                )}
                             </div>
                         </div>
 
                         {/* 下游依赖 */}
                         <div>
                             <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                                下游依赖 ({relationships.downstream.length})
+                                下游依赖 (依赖于) - {relationships.downstream.length}
                             </h3>
                             <div className="space-y-2">
-                                {relationships.downstream.map((rel) => (
-                                    <Link
+                                {relationships.downstream.length > 0 ? relationships.downstream.map((rel) => (
+                                    <div
                                         key={rel.id}
-                                        href={`/cmdb/${rel.id}`}
-                                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer"
+                                        className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/50 transition-colors"
                                     >
                                         <Database className="h-5 w-5 text-accent" />
                                         <div className="flex-1">
-                                            <div className="font-medium text-foreground">{rel.name}</div>
-                                            <div className="text-sm text-muted-foreground">{rel.type}</div>
+                                            <Link href={`/cmdb/${rel.to_ci_id}`} className="font-medium text-foreground hover:underline">
+                                                {rel.to_ci_name}
+                                            </Link>
+                                            <div className="text-sm text-muted-foreground">ID: {rel.to_ci_id}</div>
                                         </div>
                                         <div className="text-xs px-2 py-1 bg-muted rounded">
-                                            {rel.relType}
+                                            {rel.rel_type}
                                         </div>
-                                    </Link>
-                                ))}
+                                        <button
+                                            onClick={() => handleDeleteRelationship(rel.id)}
+                                            className="text-muted-foreground hover:text-error p-1"
+                                            title="删除关系"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )) : (
+                                    <div className="text-sm text-muted-foreground italic pl-2">无下游依赖</div>
+                                )}
                             </div>
                         </div>
 
                         <div className="pt-4 border-t border-border">
                             <Link
-                                href="/cmdb/topology"
+                                href={`/cmdb/topology?ci_id=${ci?.id}`}
                                 className="btn-primary w-full justify-center"
                             >
                                 <Network className="h-4 w-4 mr-2" />
@@ -225,45 +386,156 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                     </div>
                 )}
 
-                {/* 关联告警 */}
+                {/* 关联告警 - 暂时为空 */}
                 {activeTab === 'alerts' && (
                     <div className="p-6">
-                        {relatedAlerts.length > 0 ? (
-                            <div className="space-y-2">
-                                {relatedAlerts.map((alert) => (
-                                    <Link
-                                        key={alert.id}
-                                        href={`/alerts/${alert.id}`}
-                                        className="flex items-center gap-3 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors cursor-pointer"
-                                    >
-                                        <div
-                                            className={`p-2 rounded-lg ${alert.level === 'critical'
-                                                    ? 'alert-critical'
-                                                    : 'alert-warning'
-                                                }`}
-                                        >
-                                            {alert.level === 'critical' ? (
-                                                <AlertTriangle className="h-5 w-5" />
-                                            ) : (
-                                                <Clock className="h-5 w-5" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="font-medium text-foreground">{alert.title}</div>
-                                            <div className="text-sm text-muted-foreground">{alert.id}</div>
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">{alert.time}</div>
-                                    </Link>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-8 text-muted-foreground">
-                                暂无关联告警
-                            </div>
-                        )}
+                        <div className="text-center py-8 text-muted-foreground">
+                            暂无关联告警 (功能开发中)
+                        </div>
                     </div>
                 )}
             </div>
+
+            {/* 编辑模态框 */}
+            {isEditing && ci && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="card p-6 w-full max-w-lg animate-slide-in">
+                        <h2 className="text-lg font-semibold text-foreground mb-4">编辑配置项</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    配置项名称
+                                </label>
+                                <input
+                                    type="text"
+                                    className="input w-full"
+                                    value={editingData.name || ''}
+                                    onChange={(e) => setEditingData({ ...editingData, name: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    状态
+                                </label>
+                                <select
+                                    className="input w-full"
+                                    value={editingData.status || ''}
+                                    onChange={(e) => setEditingData({ ...editingData, status: e.target.value })}
+                                >
+                                    <option value="active">运行中</option>
+                                    <option value="inactive">已停用</option>
+                                    <option value="maintenance">维护中</option>
+                                    <option value="error">故障</option>
+                                </select>
+                            </div>
+
+                            <div className="border-t border-border pt-4 mt-2">
+                                <h3 className="text-sm font-medium mb-3">属性信息</h3>
+                                <DynamicForm
+                                    schema={ciType?.attribute_schema}
+                                    initialValues={editingData.attributes}
+                                    onChange={(values) => setEditingData(prev => ({ ...prev, attributes: values }))}
+                                    mode="edit"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 pt-6">
+                            <button
+                                onClick={() => setIsEditing(false)}
+                                className="btn-outline flex-1"
+                                disabled={isSaving}
+                            >
+                                取消
+                            </button>
+                            <button
+                                className="btn-primary flex-1"
+                                onClick={handleUpdate}
+                                disabled={isSaving}
+                            >
+                                {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                保存修改
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* 添加关系模态框 */}
+            {isAddRelOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="card p-6 w-full max-w-md animate-slide-in">
+                        <h2 className="text-lg font-semibold mb-4">添加关联关系</h2>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">关系类型</label>
+                                <select
+                                    className="input w-full"
+                                    value={relType}
+                                    onChange={(e) => setRelType(e.target.value)}
+                                >
+                                    <option value="depends_on">依赖于 (Depends On)</option>
+                                    <option value="contains">包含 (Contains)</option>
+                                    <option value="connects_to">连接到 (Connects To)</option>
+                                    <option value="runs_on">运行在 (Runs On)</option>
+                                    <option value="deployed_on">部署在 (Deployed On)</option>
+                                    <option value="belongs_to">属于 (Belongs To)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1">目标配置项</label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <input
+                                        className="input w-full pl-9"
+                                        placeholder="搜索配置项名称/标识..."
+                                        value={targetSearch}
+                                        onChange={(e) => setTargetSearch(e.target.value)}
+                                    />
+                                </div>
+
+                                {/* 搜索结果 */}
+                                <div className="mt-2 border border-border rounded-md max-h-40 overflow-y-auto">
+                                    {isSearching ? (
+                                        <div className="p-2 text-center text-sm text-muted-foreground">搜索中...</div>
+                                    ) : targetResults.length > 0 ? (
+                                        targetResults.map(item => (
+                                            <div
+                                                key={item.id}
+                                                className={`p-2 text-sm cursor-pointer hover:bg-accent/10 flex justify-between items-center ${selectedTargetId === item.id ? 'bg-primary/10 text-primary' : ''}`}
+                                                onClick={() => setSelectedTargetId(item.id)}
+                                            >
+                                                <span>{item.name}</span>
+                                                <span className="text-xs text-muted-foreground">{item.identifier}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="p-2 text-center text-sm text-muted-foreground">
+                                            {targetSearch ? '未找到相关配置项' : '请输入关键词搜索'}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-6">
+                            <button
+                                onClick={() => setIsAddRelOpen(false)}
+                                className="btn-outline flex-1"
+                            >
+                                取消
+                            </button>
+                            <button
+                                className="btn-primary flex-1"
+                                onClick={handleAddRelationship}
+                                disabled={!selectedTargetId}
+                            >
+                                确认添加
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

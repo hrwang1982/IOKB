@@ -74,6 +74,81 @@ class CITypeService:
         )
         return result.scalar_one_or_none()
 
+    async def create(
+        self,
+        db: AsyncSession,
+        name: str,
+        code: str,
+        icon: Optional[str] = None,
+        description: Optional[str] = None,
+        attribute_schema: Optional[Dict[str, Any]] = None,
+    ) -> CIType:
+        """创建配置项类型"""
+        # 检查是否已存在
+        existing = await self.get_type_by_code(db, code)
+        if existing:
+            raise ValueError(f"CI类型编码已存在: {code}")
+        
+        ci_type = CIType(
+            name=name,
+            code=code,
+            icon=icon,
+            description=description,
+            attribute_schema=attribute_schema or {"attributes": [], "category": "custom"},
+        )
+        db.add(ci_type)
+        await db.commit()
+        await db.refresh(ci_type)
+        
+        logger.info(f"创建CI类型: {code} - {name}")
+        return ci_type
+    
+    async def update(
+        self,
+        db: AsyncSession,
+        code: str,
+        name: Optional[str] = None,
+        icon: Optional[str] = None,
+        description: Optional[str] = None,
+        attribute_schema: Optional[Dict[str, Any]] = None,
+    ) -> Optional[CIType]:
+        """更新配置项类型"""
+        ci_type = await self.get_type_by_code(db, code)
+        if not ci_type:
+            return None
+        
+        if name:
+            ci_type.name = name
+        if icon:
+            ci_type.icon = icon
+        if description is not None:
+            ci_type.description = description
+        if attribute_schema is not None:
+            ci_type.attribute_schema = attribute_schema
+            
+        ci_type.updated_at = datetime.now()
+        await db.commit()
+        await db.refresh(ci_type)
+        
+        return ci_type
+    
+    async def delete(self, db: AsyncSession, code: str) -> bool:
+        """删除配置项类型"""
+        ci_type = await self.get_type_by_code(db, code)
+        if not ci_type:
+            return False
+            
+        # 检查是否有关联的配置项
+        result = await db.execute(
+            select(CI).where(CI.type_id == ci_type.id).limit(1)
+        )
+        if result.scalar_one_or_none():
+            raise ValueError(f"该类型下存在配置项，无法删除: {code}")
+        
+        await db.delete(ci_type)
+        await db.commit()
+        return True
+
 
 class CIService:
     """配置项服务"""

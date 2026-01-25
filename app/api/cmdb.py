@@ -5,10 +5,13 @@ CMDB 配置管理 API
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import oauth2_scheme
+from app.core.database import get_async_session
+from app.core.cmdb.service import ci_type_service, ci_service, relationship_service, topology_service
 
 router = APIRouter()
 
@@ -26,6 +29,23 @@ class CITypeResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class CITypeCreate(BaseModel):
+    """创建配置项类型请求"""
+    name: str
+    code: str
+    icon: Optional[str] = None
+    description: Optional[str] = None
+    attribute_schema: Optional[Dict[str, Any]] = None
+
+
+class CITypeUpdate(BaseModel):
+    """更新配置项类型请求"""
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    description: Optional[str] = None
+    attribute_schema: Optional[Dict[str, Any]] = None
 
 
 class CICreate(BaseModel):
@@ -90,46 +110,132 @@ class DataSourceConfig(BaseModel):
 # ==================== 配置项类型 ====================
 
 @router.get("/types", summary="获取配置项类型列表")
-async def list_ci_types(token: str = Depends(oauth2_scheme)):
-    """获取所有配置项类型"""
+async def list_ci_types(
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    获取所有配置项类型
+    
+    如果数据库中没有类型数据，会自动初始化预置类型
+    """
+    # 从数据库获取所有类型
+    ci_types = await ci_type_service.get_all_types(db)
+    
+    # 如果为空，初始化预置类型
+    if not ci_types:
+        await ci_type_service.init_preset_types(db)
+        ci_types = await ci_type_service.get_all_types(db)
+    
     return {
         "items": [
-            {"id": 1, "name": "存储设备", "code": "storage"},
-            {"id": 2, "name": "网络设备", "code": "network"},
-            {"id": 3, "name": "物理服务器", "code": "server"},
-            {"id": 4, "name": "Linux系统", "code": "os_linux"},
-            {"id": 5, "name": "Windows系统", "code": "os_windows"},
-            {"id": 6, "name": "vCenter集群", "code": "vmware_vcenter"},
-            {"id": 7, "name": "ESXi主机", "code": "vmware_esxi"},
-            {"id": 8, "name": "虚拟机", "code": "vmware_vm"},
-            {"id": 9, "name": "K8s集群", "code": "k8s_cluster"},
-            {"id": 10, "name": "K8s节点", "code": "k8s_node"},
-            {"id": 11, "name": "K8s Pod", "code": "k8s_pod"},
-            {"id": 12, "name": "Docker主机", "code": "docker_host"},
-            {"id": 13, "name": "Docker容器", "code": "docker_container"},
-            {"id": 14, "name": "中间件", "code": "middleware"},
-            {"id": 15, "name": "数据库", "code": "database"},
-            {"id": 16, "name": "业务应用", "code": "application"},
+            {
+                "id": ct.id,
+                "name": ct.name,
+                "code": ct.code,
+                "icon": ct.icon,
+                "description": ct.description,
+                "category": ct.attribute_schema.get("category") if ct.attribute_schema else None,
+            }
+            for ct in ci_types
         ]
     }
 
 
 @router.get("/types/{type_code}", response_model=CITypeResponse, summary="获取配置项类型详情")
-async def get_ci_type(type_code: str, token: str = Depends(oauth2_scheme)):
-    """获取配置项类型详情"""
+async def get_ci_type(
+    type_code: str,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """获取配置项类型详情，包含完整属性Schema"""
+    ci_type = await ci_type_service.get_type_by_code(db, type_code)
+    
+    if not ci_type:
+        raise HTTPException(status_code=404, detail=f"配置项类型不存在: {type_code}")
+    
     return CITypeResponse(
-        id=1,
-        name="物理服务器",
-        code=type_code,
-        icon="server",
-        description="物理服务器配置项",
-        attribute_schema={
-            "cpu": {"type": "string", "label": "CPU"},
-            "memory": {"type": "string", "label": "内存"},
-            "disk": {"type": "string", "label": "磁盘"},
-            "ip": {"type": "string", "label": "IP地址"},
-        }
+        id=ci_type.id,
+        name=ci_type.name,
+        code=ci_type.code,
+        icon=ci_type.icon,
+        description=ci_type.description,
+        attribute_schema=ci_type.attribute_schema
     )
+
+
+@router.post("/types", response_model=CITypeResponse, summary="创建配置项类型")
+async def create_ci_type(
+    item: CITypeCreate,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """创建新的配置项类型"""
+    try:
+        new_type = await ci_type_service.create(
+            db,
+            name=item.name,
+            code=item.code,
+            icon=item.icon,
+            description=item.description,
+            attribute_schema=item.attribute_schema
+        )
+        return CITypeResponse(
+            id=new_type.id,
+            name=new_type.name,
+            code=new_type.code,
+            icon=new_type.icon,
+            description=new_type.description,
+            attribute_schema=new_type.attribute_schema
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/types/{type_code}", response_model=CITypeResponse, summary="更新配置项类型")
+async def update_ci_type(
+    type_code: str,
+    item: CITypeUpdate,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """更新配置项类型"""
+    updated_type = await ci_type_service.update(
+        db,
+        code=type_code,
+        name=item.name,
+        icon=item.icon,
+        description=item.description,
+        attribute_schema=item.attribute_schema
+    )
+    
+    if not updated_type:
+        raise HTTPException(status_code=404, detail=f"配置项类型不存在: {type_code}")
+    
+    return CITypeResponse(
+        id=updated_type.id,
+        name=updated_type.name,
+        code=updated_type.code,
+        icon=updated_type.icon,
+        description=updated_type.description,
+        attribute_schema=updated_type.attribute_schema
+    )
+
+
+@router.delete("/types/{type_code}", summary="删除配置项类型")
+async def delete_ci_type(
+    type_code: str,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """删除配置项类型"""
+    try:
+        success = await ci_type_service.delete(db, type_code)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"配置项类型不存在: {type_code}")
+        return {"message": f"类型 {type_code} 已删除"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ==================== 配置项管理 ====================
@@ -141,6 +247,7 @@ async def list_cis(
     keyword: Optional[str] = None,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
     """
@@ -150,47 +257,92 @@ async def list_cis(
     - **status**: 可选，按状态筛选
     - **keyword**: 可选，搜索关键词
     """
+    offset = (page - 1) * size
+    cis, total = await ci_service.list(
+        db,
+        type_code=type_code,
+        status=status,
+        keyword=keyword,
+        offset=offset,
+        limit=size
+    )
+    
     return {
-        "items": [],
-        "total": 0,
+        "items": [
+            {
+                "id": ci.id,
+                "type_id": ci.type_id,
+                "type_code": ci.ci_type.code if ci.ci_type else None,
+                "type_name": ci.ci_type.name if ci.ci_type else None,
+                "name": ci.name,
+                "identifier": ci.identifier,
+                "status": ci.status,
+                "attributes": ci.attributes,
+                "created_at": ci.created_at.isoformat() if ci.created_at else None,
+                "updated_at": ci.updated_at.isoformat() if ci.updated_at else None,
+            }
+            for ci in cis
+        ],
+        "total": total,
         "page": page,
         "size": size
     }
 
 
 @router.post("/items", response_model=CIResponse, summary="创建配置项")
-async def create_ci(ci: CICreate, token: str = Depends(oauth2_scheme)):
+async def create_ci(
+    ci: CICreate,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
     """创建新配置项"""
-    now = datetime.now()
-    return CIResponse(
-        id=1,
-        type_id=1,
-        type_code=ci.type_code,
-        type_name="物理服务器",
-        name=ci.name,
-        identifier=ci.identifier,
-        status="active",
-        attributes=ci.attributes,
-        created_at=now,
-        updated_at=now
-    )
+    try:
+        new_ci = await ci_service.create(
+            db,
+            type_code=ci.type_code,
+            name=ci.name,
+            identifier=ci.identifier,
+            attributes=ci.attributes
+        )
+        return CIResponse(
+            id=new_ci.id,
+            type_id=new_ci.type_id,
+            type_code=new_ci.ci_type.code if new_ci.ci_type else ci.type_code,
+            type_name=new_ci.ci_type.name if new_ci.ci_type else "",
+            name=new_ci.name,
+            identifier=new_ci.identifier,
+            status=new_ci.status,
+            attributes=new_ci.attributes,
+            created_at=new_ci.created_at,
+            updated_at=new_ci.updated_at
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/items/{ci_id}", response_model=CIResponse, summary="获取配置项详情")
-async def get_ci(ci_id: int, token: str = Depends(oauth2_scheme)):
+async def get_ci(
+    ci_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
     """获取配置项详情"""
-    now = datetime.now()
+    ci = await ci_service.get_by_id(db, ci_id)
+    
+    if not ci:
+        raise HTTPException(status_code=404, detail=f"配置项不存在: {ci_id}")
+    
     return CIResponse(
-        id=ci_id,
-        type_id=1,
-        type_code="server",
-        type_name="物理服务器",
-        name="示例服务器",
-        identifier="server-001",
-        status="active",
-        attributes={"ip": "192.168.1.1"},
-        created_at=now,
-        updated_at=now
+        id=ci.id,
+        type_id=ci.type_id,
+        type_code=ci.ci_type.code if ci.ci_type else None,
+        type_name=ci.ci_type.name if ci.ci_type else None,
+        name=ci.name,
+        identifier=ci.identifier,
+        status=ci.status,
+        attributes=ci.attributes,
+        created_at=ci.created_at,
+        updated_at=ci.updated_at
     )
 
 
@@ -198,27 +350,46 @@ async def get_ci(ci_id: int, token: str = Depends(oauth2_scheme)):
 async def update_ci(
     ci_id: int,
     ci: CICreate,
+    db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
     """更新配置项"""
-    now = datetime.now()
-    return CIResponse(
-        id=ci_id,
-        type_id=1,
-        type_code=ci.type_code,
-        type_name="物理服务器",
+    updated_ci = await ci_service.update(
+        db,
+        ci_id=ci_id,
         name=ci.name,
-        identifier=ci.identifier,
-        status="active",
-        attributes=ci.attributes,
-        created_at=now,
-        updated_at=now
+        attributes=ci.attributes
+    )
+    
+    if not updated_ci:
+        raise HTTPException(status_code=404, detail=f"配置项不存在: {ci_id}")
+    
+    return CIResponse(
+        id=updated_ci.id,
+        type_id=updated_ci.type_id,
+        type_code=updated_ci.ci_type.code if updated_ci.ci_type else ci.type_code,
+        type_name=updated_ci.ci_type.name if updated_ci.ci_type else "",
+        name=updated_ci.name,
+        identifier=updated_ci.identifier,
+        status=updated_ci.status,
+        attributes=updated_ci.attributes,
+        created_at=updated_ci.created_at,
+        updated_at=updated_ci.updated_at
     )
 
 
 @router.delete("/items/{ci_id}", summary="删除配置项")
-async def delete_ci(ci_id: int, token: str = Depends(oauth2_scheme)):
+async def delete_ci(
+    ci_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
     """删除配置项"""
+    success = await ci_service.delete(db, ci_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail=f"配置项不存在: {ci_id}")
+    
     return {"message": f"配置项 {ci_id} 已删除"}
 
 
@@ -228,6 +399,7 @@ async def delete_ci(ci_id: int, token: str = Depends(oauth2_scheme)):
 async def get_ci_relationships(
     ci_id: int,
     direction: str = Query("both", regex="^(from|to|both)$"),
+    db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
     """
@@ -235,28 +407,53 @@ async def get_ci_relationships(
     
     - **direction**: from(上游), to(下游), both(双向)
     """
-    return {"upstream": [], "downstream": []}
+    rels = await relationship_service.get_relationships(db, ci_id, direction)
+    return rels
 
 
 @router.post("/relationships", response_model=RelationshipResponse, summary="创建关系")
 async def create_relationship(
     rel: RelationshipCreate,
+    db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
     """创建配置项之间的关系"""
-    return RelationshipResponse(
-        id=1,
-        from_ci_id=rel.from_ci_id,
-        from_ci_name="服务器A",
-        to_ci_id=rel.to_ci_id,
-        to_ci_name="应用B",
-        rel_type=rel.rel_type
-    )
+    try:
+        new_rel = await relationship_service.create(
+            db,
+            from_ci_id=rel.from_ci_id,
+            to_ci_id=rel.to_ci_id,
+            rel_type=rel.rel_type
+        )
+        
+        # 获取关联的CI名称
+        from_ci = await ci_service.get_by_id(db, rel.from_ci_id)
+        to_ci = await ci_service.get_by_id(db, rel.to_ci_id)
+        
+        return RelationshipResponse(
+            id=new_rel.id,
+            from_ci_id=new_rel.from_ci_id,
+            from_ci_name=from_ci.name if from_ci else "",
+            to_ci_id=new_rel.to_ci_id,
+            to_ci_name=to_ci.name if to_ci else "",
+            rel_type=new_rel.rel_type
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/relationships/{rel_id}", summary="删除关系")
-async def delete_relationship(rel_id: int, token: str = Depends(oauth2_scheme)):
+async def delete_relationship(
+    rel_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
     """删除关系"""
+    success = await relationship_service.delete(db, rel_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail=f"关系不存在: {rel_id}")
+    
     return {"message": f"关系 {rel_id} 已删除"}
 
 
@@ -266,6 +463,7 @@ async def delete_relationship(rel_id: int, token: str = Depends(oauth2_scheme)):
 async def get_topology(
     ci_id: Optional[int] = None,
     depth: int = Query(2, ge=1, le=5),
+    db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
     """
@@ -274,10 +472,7 @@ async def get_topology(
     - **ci_id**: 可选，以某个CI为中心展示
     - **depth**: 展示深度
     """
-    return {
-        "nodes": [],
-        "edges": []
-    }
+    return await topology_service.get_topology(db, ci_id, depth)
 
 
 # ==================== 数据同步 ====================
