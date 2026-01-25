@@ -63,7 +63,7 @@ class KafkaSyncManager:
                     host=settings.kafka_bootstrap_servers,
                     database=settings.cmdb_kafka_topic, # Topic stored in database field
                     username="",
-                    password="",
+                    password_encrypted="",
                     port=9092, # Default
                     status="active",
                     extra_config={

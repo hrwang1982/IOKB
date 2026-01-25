@@ -14,7 +14,9 @@ import {
     Box,
     Loader2
 } from 'lucide-react';
-import { getCITypes, createCIType, updateCIType, deleteCIType, type CIType, type AttributeDefinition } from '@/lib/api';
+import { getCITypes, createCIType, updateCIType, deleteCIType, deleteCITypeById, type CIType, type AttributeDefinition } from '@/lib/api';
+
+
 
 // 图标映射
 const iconMap: Record<string, any> = {
@@ -136,12 +138,15 @@ export default function CITypesPage() {
         }
     };
 
-    const handleDelete = async (code: string) => {
-        if (!confirm('确定要删除这个类型吗？如果该类型下有配置项，删除将失败。')) return;
+    const handleDelete = async (ciType: CIType) => {
+        const identifier = ciType.code || `ID:${ciType.id}`;
+        if (!confirm(`确定要删除配置项类型 [${identifier}] 吗？如果该类型下有配置项，删除将失败。`)) return;
+
         try {
-            await deleteCIType(code);
+            await deleteCITypeById(ciType.id);
             loadTypes();
         } catch (error) {
+            console.error('Delete failed:', error);
             alert('删除失败: ' + (error as Error).message);
         }
     };
@@ -237,7 +242,7 @@ export default function CITypesPage() {
                                                         <Edit className="h-4 w-4" />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(type.code)}
+                                                        onClick={() => handleDelete(type)}
                                                         className="btn-ghost btn-sm text-error hover:text-error hover:bg-error/10"
                                                         title="删除"
                                                     >

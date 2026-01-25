@@ -155,13 +155,11 @@ async def list_ci_types(
     
     如果数据库中没有类型数据，会自动初始化预置类型
     """
+    # 确保预置类型已初始化且Schema完整
+    await ci_type_service.init_preset_types(db)
+    
     # 从数据库获取所有类型
     ci_types = await ci_type_service.get_all_types(db)
-    
-    # 如果为空，初始化预置类型
-    if not ci_types:
-        await ci_type_service.init_preset_types(db)
-        ci_types = await ci_type_service.get_all_types(db)
     
     return {
         "items": [
@@ -171,6 +169,7 @@ async def list_ci_types(
                 "code": ct.code,
                 "icon": ct.icon,
                 "description": ct.description,
+                "attribute_schema": ct.attribute_schema,
                 "category": ct.attribute_schema.get("category") if ct.attribute_schema else None,
             }
             for ct in ci_types
@@ -256,6 +255,22 @@ async def update_ci_type(
         description=updated_type.description,
         attribute_schema=updated_type.attribute_schema
     )
+
+
+@router.delete("/types/id/{type_id}", summary="根据ID删除配置项类型")
+async def delete_ci_type_by_id(
+    type_id: int,
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """根据ID删除配置项类型"""
+    try:
+        success = await ci_type_service.delete_by_id(db, type_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Backend: 配置项类型不存在 (ID: {type_id})")
+        return {"message": f"类型 ID:{type_id} 已删除"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/types/{type_code}", summary="删除配置项类型")

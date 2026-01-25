@@ -30,7 +30,50 @@ class CITypeService:
             existing = result.scalar_one_or_none()
             
             if existing:
-                logger.debug(f"CI类型已存在: {preset.code}")
+                # Check if schema is empty and needs hydration
+                current_schema = existing.attribute_schema or {}
+                has_attributes = current_schema.get("attributes") and len(current_schema["attributes"]) > 0
+                
+                if not has_attributes:
+                    logger.info(f"Hydrating empty schema for existing type: {preset.code}")
+                    existing.name = preset.name
+                    existing.icon = preset.icon
+                    existing.description = preset.description
+                    existing.attribute_schema = {
+                        "category": preset.category,
+                        "attributes": [
+                            {
+                                "name": attr.name,
+                                "label": attr.label,
+                                "type": attr.type,
+                                "required": attr.required,
+                                "default": attr.default,
+                                "options": attr.options,
+                                "description": attr.description,
+                                # UI
+                                "group": attr.group,
+                                "order": attr.order,
+                                "widget": attr.widget,
+                                "placeholder": attr.placeholder,
+                                "hidden": attr.hidden,
+                                "readonly": attr.readonly,
+                                # Validation
+                                "unique": attr.unique,
+                                "regex": attr.regex,
+                                "min_val": attr.min_val,
+                                "max_val": attr.max_val,
+                                # Ref
+                                "ref_type": attr.ref_type,
+                                "ref_filter": attr.ref_filter,
+                            }
+                            for attr in preset.attributes
+                        ],
+                    }
+                    existing.updated_at = datetime.now()
+                    db.add(existing)
+                    count += 1
+                else:
+                    logger.debug(f"CI type already has attributes, skipping overwrite: {preset.code}")
                 continue
             
             # 创建新类型
@@ -72,7 +115,7 @@ class CITypeService:
             )
             db.add(ci_type)
             count += 1
-            logger.info(f"创建CI类型: {preset.code} - {preset.name}")
+            logger.info(f"Initialized new CI type: {preset.code} - {preset.name}")
         
         await db.commit()
         return count
@@ -159,6 +202,26 @@ class CITypeService:
         )
         if result.scalar_one_or_none():
             raise ValueError(f"该类型下存在配置项，无法删除: {code}")
+        
+        await db.delete(ci_type)
+        await db.commit()
+        return True
+    
+    async def delete_by_id(self, db: AsyncSession, type_id: int) -> bool:
+        """根据ID删除配置项类型"""
+        result = await db.execute(
+             select(CIType).where(CIType.id == type_id)
+        )
+        ci_type = result.scalar_one_or_none()
+        if not ci_type:
+            return False
+            
+        # 检查是否有关联的配置项
+        result = await db.execute(
+            select(CI).where(CI.type_id == ci_type.id).limit(1)
+        )
+        if result.scalar_one_or_none():
+            raise ValueError(f"该类型下存在配置项，无法删除 (ID: {type_id})")
         
         await db.delete(ci_type)
         await db.commit()
