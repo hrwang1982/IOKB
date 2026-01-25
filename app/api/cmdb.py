@@ -18,6 +18,41 @@ router = APIRouter()
 
 # ==================== 数据模型 ====================
 
+class AttributeSchemaModel(BaseModel):
+    """属性Schema模型"""
+    name: str
+    label: str
+    type: str
+    required: bool = False
+    default: Any = None
+    options: Optional[List[Dict[str, Any]]] = None
+    description: Optional[str] = ""
+    
+    # UI 展示
+    group: Optional[str] = "基本信息"
+    order: Optional[int] = 0
+    widget: Optional[str] = "input"
+    placeholder: Optional[str] = ""
+    hidden: Optional[bool] = False
+    readonly: Optional[bool] = False
+    
+    # 数据验证
+    unique: Optional[bool] = False
+    regex: Optional[str] = ""
+    min_val: Optional[float] = None
+    max_val: Optional[float] = None
+    
+    # 引用配置
+    ref_type: Optional[str] = ""
+    ref_filter: Optional[Dict[str, Any]] = None
+
+
+class CISchemaDefinition(BaseModel):
+    """完整Schema定义"""
+    category: Optional[str] = "custom"
+    attributes: List[AttributeSchemaModel] = []
+
+
 class CITypeResponse(BaseModel):
     """配置项类型响应"""
     id: int
@@ -25,7 +60,7 @@ class CITypeResponse(BaseModel):
     code: str
     icon: Optional[str] = None
     description: Optional[str] = None
-    attribute_schema: Optional[Dict[str, Any]] = None
+    attribute_schema: Optional[CISchemaDefinition] = None
     
     class Config:
         from_attributes = True
@@ -37,7 +72,7 @@ class CITypeCreate(BaseModel):
     code: str
     icon: Optional[str] = None
     description: Optional[str] = None
-    attribute_schema: Optional[Dict[str, Any]] = None
+    attribute_schema: Optional[CISchemaDefinition] = None
 
 
 class CITypeUpdate(BaseModel):
@@ -45,7 +80,7 @@ class CITypeUpdate(BaseModel):
     name: Optional[str] = None
     icon: Optional[str] = None
     description: Optional[str] = None
-    attribute_schema: Optional[Dict[str, Any]] = None
+    attribute_schema: Optional[CISchemaDefinition] = None
 
 
 class CICreate(BaseModel):
@@ -105,6 +140,7 @@ class DataSourceConfig(BaseModel):
     sync_interval: int = 60  # 分钟
     sync_mode: str = "incremental"  # full, incremental
     table_mappings: Optional[List[Dict[str, Any]]] = None
+    extra_config: Optional[Dict[str, Any]] = None
 
 
 # ==================== 配置项类型 ====================

@@ -50,6 +50,21 @@ class CITypeService:
                             "default": attr.default,
                             "options": attr.options,
                             "description": attr.description,
+                            # UI
+                            "group": attr.group,
+                            "order": attr.order,
+                            "widget": attr.widget,
+                            "placeholder": attr.placeholder,
+                            "hidden": attr.hidden,
+                            "readonly": attr.readonly,
+                            # Validation
+                            "unique": attr.unique,
+                            "regex": attr.regex,
+                            "min_val": attr.min_val,
+                            "max_val": attr.max_val,
+                            # Ref
+                            "ref_type": attr.ref_type,
+                            "ref_filter": attr.ref_filter,
                         }
                         for attr in preset.attributes
                     ],
@@ -153,6 +168,68 @@ class CITypeService:
 class CIService:
     """配置项服务"""
     
+    async def _validate_attributes(self, db: AsyncSession, type_code: str, attributes: Dict[str, Any], current_ci_id: Optional[int] = None):
+        """校验属性"""
+        ci_type = await CITypeService().get_type_by_code(db, type_code)
+        if not ci_type:
+             # 对于未知的类型，如果是预置的可能在内存中但未初始化的，这里为了简单起见，假设类型已存在DB
+             # 实际生产中应先确保CIType已初始化
+             logger.warning(f"Validation skipped for unknown type: {type_code}")
+             return
+
+        schema_attrs = ci_type.attribute_schema.get("attributes", [])
+        if not schema_attrs:
+            return
+
+        for attr_schema in schema_attrs:
+            key = attr_schema.get("name")
+            value = attributes.get(key)
+            
+            # 1. 必填校验
+            if attr_schema.get("required") and value in (None, ""):
+                raise ValueError(f"属性 {attr_schema.get('label', key)} ({key}) 不能为空")
+            
+            if value is not None and value != "":
+                # 2. 类型/格式校验
+                import re
+                regex = attr_schema.get("regex")
+                if regex and not re.match(regex, str(value)):
+                    raise ValueError(f"属性 {attr_schema.get('label', key)} 格式不正确")
+                
+                # 3. 数值范围校验
+                val_type = attr_schema.get("type")
+                if val_type == "number":
+                    try:
+                        num_val = float(value)
+                        min_val = attr_schema.get("min_val")
+                        max_val = attr_schema.get("max_val")
+                        if min_val is not None and num_val < min_val:
+                            raise ValueError(f"属性 {attr_schema.get('label', key)} 不能小于 {min_val}")
+                        if max_val is not None and num_val > max_val:
+                            raise ValueError(f"属性 {attr_schema.get('label', key)} 不能大于 {max_val}")
+                    except ValueError:
+                         raise ValueError(f"属性 {attr_schema.get('label', key)} 必须是数字")
+
+                # 4. 唯一性校验
+                if attr_schema.get("unique"):
+                    # 构建JSON字段查询
+                    # PostgreSQL: arrow operator ->> returns text
+                    stmt = select(CI).where(
+                        and_(
+                            CI.type_id == ci_type.id,
+                            # 使用 cast 或 func.json_extract_path_text 适配不同数据库，这里假设 PostgreSQL 或 SQLite 支持
+                            # SQLAlchemy func.json_extract_path_text(CI.attributes, key) == str(value)
+                            CI.attributes[key].astext == str(value) 
+                        )
+                    )
+                    if current_ci_id:
+                        stmt = stmt.where(CI.id != current_ci_id)
+                    
+                    result = await db.execute(stmt)
+                    if result.scalar_one_or_none():
+                         raise ValueError(f"属性 {attr_schema.get('label', key)} 的值 '{value}' 已存在")
+
+
     async def create(
         self,
         db: AsyncSession,
@@ -167,6 +244,11 @@ class CIService:
         if not ci_type:
             raise ValueError(f"未知的配置项类型: {type_code}")
         
+        attributes = attributes or {}
+        
+        # 属性校验
+        await self._validate_attributes(db, type_code, attributes)
+
         # 检查标识符唯一性
         existing = await self.get_by_identifier(db, identifier)
         if existing:
@@ -177,7 +259,7 @@ class CIService:
             name=name,
             identifier=identifier,
             status="active",
-            attributes=attributes or {},
+            attributes=attributes,
         )
         db.add(ci)
         await db.commit()
@@ -185,7 +267,7 @@ class CIService:
         
         logger.info(f"创建配置项: {identifier} - {name}")
         return ci
-    
+
     async def get_by_id(self, db: AsyncSession, ci_id: int) -> Optional[CI]:
         """根据ID获取配置项"""
         result = await db.execute(
@@ -253,7 +335,7 @@ class CIService:
         result = await db.execute(query)
         
         return result.scalars().all(), total
-    
+
     async def update(
         self,
         db: AsyncSession,
@@ -267,12 +349,17 @@ class CIService:
         if not ci:
             return None
         
+        if attributes:
+            # 合并属性
+            new_attributes = {**(ci.attributes or {}), **attributes}
+            # 校验完整属性
+            await self._validate_attributes(db, ci.ci_type.code, new_attributes, current_ci_id=ci_id)
+            ci.attributes = new_attributes
+
         if name:
             ci.name = name
         if status:
             ci.status = status
-        if attributes:
-            ci.attributes = {**(ci.attributes or {}), **attributes}
         
         ci.updated_at = datetime.now()
         await db.commit()

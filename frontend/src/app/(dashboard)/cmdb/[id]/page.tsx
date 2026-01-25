@@ -274,19 +274,21 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                 {/* 属性信息 */}
                 {activeTab === 'attributes' && (
                     <div className="p-6">
-                        <div className="grid grid-cols-2 gap-6">
-                            {ci.attributes && Object.entries(ci.attributes).map(([key, value]) => (
-                                <div key={key} className="space-y-1">
-                                    <label className="text-sm text-muted-foreground">{key}</label>
-                                    <div className="text-foreground font-medium">{String(value)}</div>
-                                </div>
-                            ))}
-                            {(!ci.attributes || Object.keys(ci.attributes).length === 0) && (
-                                <div className="col-span-2 text-center text-muted-foreground py-8">
-                                    暂无属性信息
-                                </div>
-                            )}
-                        </div>
+                        {ciType ? (
+                            <DynamicForm
+                                schema={ciType.attribute_schema}
+                                initialValues={ci.attributes}
+                                onChange={() => { }} // View mode doesn't change
+                                mode="view"
+                            />
+                        ) : (
+                            <div className="text-center text-muted-foreground">加载配置项类型定义中...</div>
+                        )}
+                        {(!ci.attributes || Object.keys(ci.attributes).length === 0) && !ciType && (
+                            <div className="col-span-2 text-center text-muted-foreground py-8">
+                                暂无属性信息
+                            </div>
+                        )}
                     </div>
                 )}
 

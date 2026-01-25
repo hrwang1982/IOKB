@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     kafka_log_topic: str = "skb-logs"
     kafka_consumer_group: str = "skb-consumer"
     
+    # CMDB Kafka Config
+    cmdb_kafka_topic: str = "cmdb-cis"
+    cmdb_kafka_group_id: str = "skb-cmdb-consumer"
+    
     # Redis
     redis_host: str = "localhost"
     redis_port: int = 6379

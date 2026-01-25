@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Debug mode: {settings.debug}")
     
     # 初始化数据库连接
+    # 初始化数据库连接
     from app.core.database import init_db, close_db
     try:
         await init_db()
@@ -27,14 +28,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
     
-    # TODO: 初始化Elasticsearch连接
-    # TODO: 初始化Kafka消费者
-    # TODO: 初始化Redis连接
+    # 初始化Kafka同步管理器
+    from app.core.cmdb.kafka import kafka_sync_manager
+    await kafka_sync_manager.start()
     
     yield
     
     # 关闭时
     logger.info("Shutting down...")
+    await kafka_sync_manager.stop()
     await close_db()
     logger.info("Database connection closed")
 

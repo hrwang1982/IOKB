@@ -78,6 +78,7 @@ class DataSource(Base):
     sync_interval = Column(Integer, default=60, comment="同步间隔(分钟)")
     sync_mode = Column(String(20), default="incremental", comment="同步模式")
     table_mappings = Column(JSON, comment="表映射配置")
+    extra_config = Column(JSON, comment="额外配置(Kafka GroupID, SASL等)")
     status = Column(String(20), default="active")
     last_sync_time = Column(DateTime, comment="最后同步时间")
     created_at = Column(DateTime, default=datetime.now)
