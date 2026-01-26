@@ -180,7 +180,8 @@ class KafkaConsumerTask:
                 bootstrap_servers=self.bootstrap_servers,
                 group_id=group_id,
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                auto_offset_reset='earliest' # 或者 configurable
+                auto_offset_reset='earliest',
+                enable_auto_commit=True # Ensure we commit
             )
             await self.consumer.start()
             logger.info(f"Kafka consumer started for {self.topic}")
@@ -225,7 +226,7 @@ class KafkaConsumerTask:
                             logger.info(f"Auto-generated identifier for {type_code}: {identifier}")
             
             if not (type_code and identifier):
-                logger.warning("Invalid message: missing type_code or identifier (and generation failed)")
+                logger.warning(f"Invalid message: type_code={type_code}, identifier={identifier} (Generation failed). Raw data: {data}")
                 return
 
         async with async_session_maker() as db:

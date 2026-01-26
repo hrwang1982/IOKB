@@ -50,6 +50,7 @@ class AttributeSchemaModel(BaseModel):
 class CISchemaDefinition(BaseModel):
     """完整Schema定义"""
     category: Optional[str] = "custom"
+    identifier_rule: Optional[str] = None
     attributes: List[AttributeSchemaModel] = []
 
 
@@ -213,7 +214,7 @@ async def create_ci_type(
             code=item.code,
             icon=item.icon,
             description=item.description,
-            attribute_schema=item.attribute_schema
+            attribute_schema=item.attribute_schema.model_dump() if item.attribute_schema else None
         )
         return CITypeResponse(
             id=new_type.id,
@@ -241,7 +242,7 @@ async def update_ci_type(
         name=item.name,
         icon=item.icon,
         description=item.description,
-        attribute_schema=item.attribute_schema
+        attribute_schema=item.attribute_schema.model_dump() if item.attribute_schema else None
     )
     
     if not updated_type:
