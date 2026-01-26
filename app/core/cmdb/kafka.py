@@ -19,7 +19,7 @@ except ImportError:
 
 from app.core.database import async_session_maker
 from app.models.cmdb import DataSource
-from app.core.cmdb.service import ci_service
+from app.core.cmdb.service import ci_service, ci_type_service
 from app.config import settings
 
 class KafkaSyncManager:
@@ -215,8 +215,18 @@ class KafkaConsumerTask:
         attributes = data.get("data", {})
         
         if not (type_code and identifier):
-            logger.warning("Invalid message: missing type_code or identifier")
-            return
+            # Try to generate identifier if missing
+            if type_code and not identifier:
+                async with async_session_maker() as db:
+                    ci_type = await ci_type_service.get_type_by_code(db, type_code)
+                    if ci_type:
+                        identifier = ci_service.generate_identifier(ci_type, attributes)
+                        if identifier:
+                            logger.info(f"Auto-generated identifier for {type_code}: {identifier}")
+            
+            if not (type_code and identifier):
+                logger.warning("Invalid message: missing type_code or identifier (and generation failed)")
+                return
 
         async with async_session_maker() as db:
             if op in ("create", "update"):

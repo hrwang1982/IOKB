@@ -41,6 +41,7 @@ export default function CITypesPage() {
         icon: 'default',
         description: '',
         category: 'custom',
+        identifier_rule: '',
         attributes: [] as AttributeDefinition[]
     });
 
@@ -93,6 +94,7 @@ export default function CITypesPage() {
             icon: 'default',
             description: '',
             category: 'custom',
+            identifier_rule: '',
             attributes: []
         });
         setShowModal(true);
@@ -107,6 +109,7 @@ export default function CITypesPage() {
             icon: type.icon || 'default',
             description: type.description || '',
             category: type.attribute_schema?.category || type.category || 'custom',
+            identifier_rule: type.attribute_schema?.identifier_rule || '',
             attributes: type.attribute_schema?.attributes || []
         });
         setShowModal(true);
@@ -121,6 +124,7 @@ export default function CITypesPage() {
                 description: formData.description,
                 attribute_schema: {
                     category: formData.category,
+                    identifier_rule: formData.identifier_rule,
                     attributes: formData.attributes
                 }
             };
@@ -312,6 +316,16 @@ export default function CITypesPage() {
                                             <option value="database">数据库</option>
                                             <option value="network">网络</option>
                                         </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-medium mb-1">唯一标识生成规则</label>
+                                        <input
+                                            className="input w-full"
+                                            value={formData.identifier_rule}
+                                            onChange={e => setFormData({ ...formData, identifier_rule: e.target.value })}
+                                            placeholder="如: {hostname}-{ip}，留空则必须手动指定标识符"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">使用 &#123;属性名&#125; 占位，当Kafka消息缺少标识符时将自动生成。</p>
                                     </div>
                                     <div className="col-span-2">
                                         <label className="block text-sm font-medium mb-1">描述</label>

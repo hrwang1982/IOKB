@@ -45,6 +45,7 @@ class CITypeDefinition:
     description: str
     category: str  # infrastructure, virtualization, container, application
     attributes: List[AttributeSchema]
+    identifier_rule: Optional[str] = None  # e.g., "{hostname}" or "{ip_address}-{port}"
 
 
 # ==================== 预置配置项类型 ====================
@@ -57,6 +58,7 @@ SERVER_CI_TYPE = CITypeDefinition(
     icon="server",
     description="物理服务器设备",
     category="infrastructure",
+    identifier_rule="{management_ip}",  # Default rule
     attributes=[
         # 基本信息
         AttributeSchema("vendor", "厂商", "string", group="基本信息", widget="input", order=1),

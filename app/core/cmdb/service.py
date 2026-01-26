@@ -41,6 +41,7 @@ class CITypeService:
                     existing.description = preset.description
                     existing.attribute_schema = {
                         "category": preset.category,
+                        "identifier_rule": preset.identifier_rule,
                         "attributes": [
                             {
                                 "name": attr.name,
@@ -84,6 +85,7 @@ class CITypeService:
                 description=preset.description,
                 attribute_schema={
                     "category": preset.category,
+                    "identifier_rule": preset.identifier_rule,
                     "attributes": [
                         {
                             "name": attr.name,
@@ -291,6 +293,23 @@ class CIService:
                     result = await db.execute(stmt)
                     if result.scalar_one_or_none():
                          raise ValueError(f"属性 {attr_schema.get('label', key)} 的值 '{value}' 已存在")
+
+
+    def generate_identifier(self, ci_type: CIType, attributes: Dict[str, Any]) -> Optional[str]:
+        """根据规则生成唯一标识"""
+        rule = ci_type.attribute_schema.get("identifier_rule")
+        if not rule:
+            return None
+            
+        try:
+            # Simple format string: "{hostname}-{ip}"
+            return rule.format(**attributes)
+        except KeyError as e:
+            logger.warning(f"Failed to generate identifier: missing attribute {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error generating identifier: {e}")
+            return None
 
 
     async def create(
