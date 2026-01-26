@@ -236,7 +236,10 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <button className="btn-outline flex items-center gap-2">
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="btn-outline flex items-center gap-2"
+                        >
                             <Edit className="h-4 w-4" />
                             编辑
                         </button>
@@ -400,8 +403,8 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
 
             {/* 编辑模态框 */}
             {isEditing && ci && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="card p-6 w-full max-w-lg animate-slide-in">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="card p-6 w-full max-w-lg animate-slide-in max-h-[90vh] overflow-y-auto">
                         <h2 className="text-lg font-semibold text-foreground mb-4">编辑配置项</h2>
                         <div className="space-y-4">
                             <div>

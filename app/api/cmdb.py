@@ -398,10 +398,17 @@ async def get_ci(
     )
 
 
+class CIUpdate(BaseModel):
+    """更新配置项请求"""
+    name: Optional[str] = None
+    status: Optional[str] = None
+    attributes: Optional[Dict[str, Any]] = None
+
+
 @router.put("/items/{ci_id}", response_model=CIResponse, summary="更新配置项")
 async def update_ci(
     ci_id: int,
-    ci: CICreate,
+    ci: CIUpdate,
     db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
@@ -410,6 +417,7 @@ async def update_ci(
         db,
         ci_id=ci_id,
         name=ci.name,
+        status=ci.status,
         attributes=ci.attributes
     )
     
