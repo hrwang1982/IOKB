@@ -459,6 +459,27 @@ class CIService:
         await db.commit()
         return True
 
+    async def delete_batch(self, db: AsyncSession, ci_ids: List[int]) -> int:
+        """批量删除配置项"""
+        # 1. 检查是否存在
+        result = await db.execute(
+            select(CI).where(CI.id.in_(ci_ids))
+        )
+        cis = result.scalars().all()
+        if not cis:
+            return 0
+        
+        # 2. 删除
+        # SQLAlchemy 1.4/2.0+ delete statement
+        from sqlalchemy import delete
+        stmt = delete(CI).where(CI.id.in_(ci_ids))
+        result = await db.execute(stmt)
+        
+        await db.commit()
+        
+        logger.info(f"批量删除配置项: {len(cis)} items")
+        return result.rowcount
+
 
 class RelationshipService:
     """配置项关系服务"""

@@ -12,8 +12,9 @@ import {
     Server,
     Loader2,
     Settings,
+    Trash2,
 } from 'lucide-react';
-import { getCIs, getCITypes, createCI, type CI, type CIType } from '@/lib/api';
+import { getCIs, getCITypes, createCI, deleteCIsBatch, type CI, type CIType } from '@/lib/api';
 import { DynamicForm } from '@/components/DynamicForm';
 
 const statusConfig = {
@@ -39,6 +40,9 @@ export default function CMDBPage() {
         identifier: '',
         attributes: {} as Record<string, any>
     });
+
+    // 选中状态
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     // 加载类型数据
     useEffect(() => {
@@ -97,6 +101,52 @@ export default function CMDBPage() {
         }
     };
 
+    // 选择相关逻辑
+    const toggleSelectAll = () => {
+        if (selectedIds.size === cis.length && cis.length > 0) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(cis.map(ci => ci.id)));
+        }
+    };
+
+    const toggleSelect = (id: number) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedIds(newSelected);
+    };
+
+    const handleBatchDelete = async () => {
+        if (selectedIds.size === 0) return;
+
+        if (!confirm(`确定要删除选中的 ${selectedIds.size} 个配置项吗？此操作不可恢复。`)) {
+            return;
+        }
+
+        try {
+            await deleteCIsBatch(Array.from(selectedIds));
+            // 刷新列表
+            const res = await getCIs({
+                type_code: selectedType === 'all' ? undefined : selectedType,
+                status: selectedStatus === 'all' ? undefined : selectedStatus,
+                keyword: searchQuery || undefined,
+                page: 1,
+                size: 20
+            });
+            setCis(res.items);
+            setSelectedIds(new Set());
+            alert('删除成功');
+        } catch (error) {
+            alert('删除失败: ' + (error as Error).message);
+        }
+    };
+
+    const isAllSelected = cis.length > 0 && selectedIds.size === cis.length;
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* 页面标题 */}
@@ -114,6 +164,15 @@ export default function CMDBPage() {
                         <Network className="h-4 w-4" />
                         拓扑图
                     </Link>
+                    {selectedIds.size > 0 && (
+                        <button
+                            onClick={handleBatchDelete}
+                            className="btn-error flex items-center gap-2"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            批量删除 ({selectedIds.size})
+                        </button>
+                    )}
                     <button
                         onClick={() => setShowAddModal(true)}
                         className="btn-primary flex items-center gap-2"
@@ -211,6 +270,14 @@ export default function CMDBPage() {
                     <table className="w-full">
                         <thead className="bg-muted/50">
                             <tr>
+                                <th className="w-12 px-4 py-3">
+                                    <input
+                                        type="checkbox"
+                                        className="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                     配置项名称
                                 </th>
@@ -244,6 +311,14 @@ export default function CMDBPage() {
                                         key={ci.id}
                                         className="hover:bg-accent/5 transition-colors cursor-pointer"
                                     >
+                                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                className="checkbox"
+                                                checked={selectedIds.has(ci.id)}
+                                                onChange={() => toggleSelect(ci.id)}
+                                            />
+                                        </td>
                                         <td className="px-4 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 rounded-lg bg-primary/10 text-primary">

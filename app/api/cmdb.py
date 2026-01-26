@@ -438,6 +438,29 @@ async def update_ci(
     )
 
 
+@router.delete("/items/batch", summary="批量删除配置项")
+async def delete_items_batch(
+    ci_ids: List[int],
+    db: AsyncSession = Depends(get_async_session),
+    token: str = Depends(oauth2_scheme)
+):
+    """
+    批量删除配置项
+    """
+    count = await ci_service.delete_batch(db, ci_ids)
+    
+    # logger is not imported in this scope, need to check imports or remove logging if not available
+    # Assuming logger is available or I should add import. 
+    # Checking imports... loguru is not imported in this file.
+    # I will skip logging or use print for now, or add import.
+    # Actually, let's add the import to be safe, or just skip logging.
+    # The previous code had logger.info, so it might have been missed or available globally?
+    # File top imports: from loguru import logger? No, lines 1-15 don't show it.
+    # Let's remove logger usage for now to avoid NameError, or better, add the import at the top.
+    
+    return {"status": "success", "deleted_count": count}
+
+
 @router.delete("/items/{ci_id}", summary="删除配置项")
 async def delete_ci(
     ci_id: int,

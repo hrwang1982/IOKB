@@ -2,7 +2,8 @@
   "/_not-found/page": "app/_not-found/page.js",
   "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
   "/(dashboard)/cmdb/types/page": "app/(dashboard)/cmdb/types/page.js",
-  "/(dashboard)/alerts/[id]/page": "app/(dashboard)/alerts/[id]/page.js",
+  "/(dashboard)/knowledge/[id]/doc/[docId]/page": "app/(dashboard)/knowledge/[id]/doc/[docId]/page.js",
   "/(dashboard)/cmdb/[id]/page": "app/(dashboard)/cmdb/[id]/page.js",
-  "/(dashboard)/cmdb/topology/page": "app/(dashboard)/cmdb/topology/page.js"
+  "/(dashboard)/knowledge/[id]/page": "app/(dashboard)/knowledge/[id]/page.js",
+  "/(dashboard)/knowledge/qa/page": "app/(dashboard)/knowledge/qa/page.js"
 }
