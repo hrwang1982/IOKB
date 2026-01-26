@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -19,6 +20,7 @@ import {
 import {
     getCI,
     updateCI,
+    deleteCI,
     getCIType,
     getCIs,
     getCIRelationships,
@@ -30,9 +32,6 @@ import {
 } from '@/lib/api';
 import { DynamicForm } from '@/components/DynamicForm';
 
-
-
-
 const statusConfig = {
     active: { label: '运行中', className: 'bg-success/10 text-success' },
     inactive: { label: '已停用', className: 'bg-muted text-muted-foreground' },
@@ -41,6 +40,7 @@ const statusConfig = {
 };
 
 export default function CIDetailPage({ params }: { params: { id: string } }) {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState<'attributes' | 'relationships' | 'alerts'>('attributes');
     const [ci, setCi] = useState<CI | null>(null);
     const [loading, setLoading] = useState(true);
@@ -66,6 +66,16 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                 .catch(err => console.error('Load rels failed', err));
         }
     }, [activeTab, ci]);
+
+    const handleDelete = async () => {
+        if (!ci || !confirm(`确定要删除配置项 "${ci.name}" 吗？此操作无法撤销。`)) return;
+        try {
+            await deleteCI(ci.id);
+            router.push('/cmdb');
+        } catch (error) {
+            alert('删除失败: ' + (error as Error).message);
+        }
+    };
 
     const handleDeleteRelationship = async (relId: number) => {
         if (!confirm('确定删除此关系吗？')) return;
@@ -243,7 +253,10 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                             <Edit className="h-4 w-4" />
                             编辑
                         </button>
-                        <button className="btn-outline text-error hover:bg-error/10 flex items-center gap-2">
+                        <button
+                            onClick={handleDelete}
+                            className="btn-outline text-error hover:bg-error/10 flex items-center gap-2"
+                        >
                             <Trash2 className="h-4 w-4" />
                             删除
                         </button>
