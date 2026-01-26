@@ -27,12 +27,12 @@ async def produce_messages():
     msg1 = {
         "op": "create",
         "type_code": "server",
-        "identifier": "server-test-001",
+        "identifier": "server-test-003",
         "data": {
             "vendor": "Dell",
             "model": "PowerEdge R740",
             "serial_number": f"SN{random.randint(10000, 99999)}",
-            "management_ip": "192.168.10.101",
+            "management_ip": "192.168.10.103",
             "cpu_count": 2,
             "memory_gb": 64,
             "os": "Linux",
@@ -51,7 +51,7 @@ async def produce_messages():
             "vendor": "HP",
             "model": "ProLiant DL380",
             "serial_number": f"SN{random.randint(10000, 99999)}",
-            "management_ip": "192.168.10.102",  # Should become the identifier
+            "management_ip": "192.168.10.104",  # Should become the identifier
             "cpu_count": 4,
             "memory_gb": 128,
             "location": "DC-B-02"
@@ -63,7 +63,7 @@ async def produce_messages():
     msg3 = {
         "op": "update",
         "type_code": "server",
-        "identifier": "server-test-001",
+        "identifier": "server-test-003",
         "data": {
             "memory_gb": 128, # Upgraded
             "status_desc": "Upgraded memory on " + datetime.now().strftime("%Y-%m-%d")
