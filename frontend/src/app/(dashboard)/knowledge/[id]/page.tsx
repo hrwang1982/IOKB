@@ -29,6 +29,7 @@ import {
     getDocuments,
     uploadDocuments,
     deleteDocument,
+    deleteDocumentsBatch,
     reprocessDocument,
     getDocumentDownloadUrl,
     type KnowledgeBase,
@@ -79,6 +80,9 @@ export default function KnowledgeDetailPage() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    // 选中状态
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
     // 搜索和模态框状态
     const [searchQuery, setSearchQuery] = useState('');
@@ -142,6 +146,47 @@ export default function KnowledgeDetailPage() {
     // 移除选中的文件
     const removeFile = (index: number) => {
         setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // 切换选择单个文档
+    const toggleSelect = (id: number) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedIds(newSelected);
+    };
+
+    // 全选/取消全选
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredDocs.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredDocs.map(d => d.id)));
+        }
+    };
+
+    // 批量删除
+    const handleBatchDelete = async () => {
+        if (selectedIds.size === 0) return;
+
+        if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文档吗？此操作不可恢复。`)) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            await deleteDocumentsBatch(parseInt(kbId), Array.from(selectedIds));
+            await loadData();
+            setSelectedIds(new Set());
+        } catch (err) {
+            console.error('Batch delete failed:', err);
+            alert(err instanceof Error ? err.message : '批量删除失败');
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
     // 处理文件上传
@@ -332,6 +377,16 @@ export default function KnowledgeDetailPage() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
+                    {selectedIds.size > 0 && (
+                        <button
+                            onClick={handleBatchDelete}
+                            className="btn bg-error/10 text-error hover:bg-error/20 border-error/20"
+                            disabled={isDeleting}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            批量删除 ({selectedIds.size})
+                        </button>
+                    )}
                     <button onClick={loadData} className="btn-outline">
                         <RefreshCw className="h-4 w-4 mr-2" />
                         刷新
@@ -344,6 +399,14 @@ export default function KnowledgeDetailPage() {
                 <table className="w-full">
                     <thead className="bg-muted/50">
                         <tr>
+                            <th className="w-12 px-4 py-3 text-left">
+                                <input
+                                    type="checkbox"
+                                    className="checkbox"
+                                    checked={filteredDocs.length > 0 && selectedIds.size === filteredDocs.length}
+                                    onChange={toggleSelectAll}
+                                />
+                            </th>
                             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                 文档名称
                             </th>
@@ -371,12 +434,21 @@ export default function KnowledgeDetailPage() {
                         {filteredDocs.map((doc) => {
                             const FileIcon = fileIcons[doc.file_type] || File;
                             const status = statusConfig[doc.status as keyof typeof statusConfig] || statusConfig.pending;
+                            const isSelected = selectedIds.has(doc.id);
 
                             return (
                                 <tr
                                     key={doc.id}
-                                    className="hover:bg-accent/5 transition-colors"
+                                    className={`hover:bg-accent/5 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
                                 >
+                                    <td className="px-4 py-4">
+                                        <input
+                                            type="checkbox"
+                                            className="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => toggleSelect(doc.id)}
+                                        />
+                                    </td>
                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
                                             <FileIcon className="h-5 w-5 text-primary shrink-0" />

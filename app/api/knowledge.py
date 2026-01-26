@@ -431,6 +431,60 @@ async def get_document(
     )
 
 
+@router.delete("/{kb_id}/documents/batch", summary="批量删除文档")
+async def delete_documents_batch(
+    kb_id: int,
+    doc_ids: List[int],
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
+):
+    """批量删除文档"""
+    # 检查知识库是否存在
+    result = await session.execute(
+        select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+    )
+    kb = result.scalar_one_or_none()
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail=f"知识库 {kb_id} 不存在")
+    
+    if not doc_ids:
+        return {"message": "未选择文档", "deleted_count": 0}
+
+    # 查询要删除的文档 (确认属于该KB)
+    docs_result = await session.execute(
+        select(Document).where(
+            Document.id.in_(doc_ids),
+            Document.kb_id == kb_id
+        )
+    )
+    docs = docs_result.scalars().all()
+    
+    if not docs:
+        return {"message": "未找到匹配的文档", "deleted_count": 0}
+    
+    valid_doc_ids = [doc.id for doc in docs]
+    
+    # 删除关联的分片
+    await session.execute(
+        delete(DocumentChunk).where(DocumentChunk.document_id.in_(valid_doc_ids))
+    )
+    
+    # 删除文档
+    await session.execute(
+        delete(Document).where(Document.id.in_(valid_doc_ids))
+    )
+    
+    # 更新知识库文档数量
+    deleted_count = len(valid_doc_ids)
+    if kb:
+        kb.document_count = max(0, (kb.document_count or 0) - deleted_count)
+        
+    await session.commit()
+    
+    return {"message": f"已批量删除 {deleted_count} 个文档", "deleted_count": deleted_count}
+
+
 @router.delete("/{kb_id}/documents/{doc_id}", summary="删除文档")
 async def delete_document(
     kb_id: int,
@@ -468,6 +522,9 @@ async def delete_document(
         kb.document_count = max(0, (kb.document_count or 0) - 1)
     
     return {"message": f"文档 {doc_id} 已删除"}
+
+
+
 
 
 @router.post("/{kb_id}/documents/{doc_id}/reprocess", summary="重新处理文档")
