@@ -31,12 +31,18 @@ async def lifespan(app: FastAPI):
     # 初始化Kafka同步管理器
     from app.core.cmdb.kafka import kafka_sync_manager
     await kafka_sync_manager.start()
+
+    # 初始化告警/监控/日志消费者
+    from app.core.cmdb.kafka_consumer import kafka_consumer
+    import asyncio
+    asyncio.create_task(kafka_consumer.start())
     
     yield
     
     # 关闭时
     logger.info("Shutting down...")
     await kafka_sync_manager.stop()
+    await kafka_consumer.stop()
     await close_db()
     logger.info("Database connection closed")
 
