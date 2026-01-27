@@ -1,8 +1,8 @@
 {
-  "/(dashboard)/cmdb/[id]/page": "app/(dashboard)/cmdb/[id]/page.js",
-  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
-  "/(dashboard)/cmdb/types/page": "app/(dashboard)/cmdb/types/page.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
   "/(dashboard)/alerts/page": "app/(dashboard)/alerts/page.js",
+  "/(dashboard)/cmdb/[id]/page": "app/(dashboard)/cmdb/[id]/page.js",
   "/(dashboard)/knowledge/page": "app/(dashboard)/knowledge/page.js",
-  "/(dashboard)/knowledge/[id]/page": "app/(dashboard)/knowledge/[id]/page.js"
+  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js"
 }

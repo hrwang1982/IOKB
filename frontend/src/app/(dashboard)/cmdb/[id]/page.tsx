@@ -31,6 +31,9 @@ import {
     type CIRelationship
 } from '@/lib/api';
 import { DynamicForm } from '@/components/DynamicForm';
+import { AlertsTable } from '@/components/monitor/AlertsTable';
+import { MetricsChart } from '@/components/monitor/MetricsChart';
+import { LogsViewer } from '@/components/monitor/LogsViewer';
 
 const statusConfig = {
     active: { label: '运行中', className: 'bg-success/10 text-success' },
@@ -41,7 +44,7 @@ const statusConfig = {
 
 export default function CIDetailPage({ params }: { params: { id: string } }) {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<'attributes' | 'relationships' | 'alerts'>('attributes');
+    const [activeTab, setActiveTab] = useState<'attributes' | 'relationships' | 'alerts' | 'metrics' | 'logs'>('attributes');
     const [ci, setCi] = useState<CI | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -272,6 +275,8 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                             { key: 'attributes', label: '属性信息' },
                             { key: 'relationships', label: '关系拓扑' },
                             { key: 'alerts', label: '关联告警' },
+                            { key: 'metrics', label: '性能监控' },
+                            { key: 'logs', label: '日志' },
                         ].map((tab) => (
                             <button
                                 key={tab.key}
@@ -404,12 +409,53 @@ export default function CIDetailPage({ params }: { params: { id: string } }) {
                     </div>
                 )}
 
-                {/* 关联告警 - 暂时为空 */}
+                {/* 关联告警 */}
                 {activeTab === 'alerts' && (
                     <div className="p-6">
-                        <div className="text-center py-8 text-muted-foreground">
-                            暂无关联告警 (功能开发中)
+                        <AlertsTable ciIdentifier={ci.identifier} />
+                    </div>
+                )}
+
+                {/* 性能监控 */}
+                {activeTab === 'metrics' && (
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <MetricsChart
+                                ciIdentifier={ci.identifier}
+                                metricName="cpu_usage"
+                                title="CPU 使用率"
+                                unit="%"
+                                color="#ef4444"
+                            />
+                            <MetricsChart
+                                ciIdentifier={ci.identifier}
+                                metricName="memory_usage"
+                                title="内存使用率"
+                                unit="%"
+                                color="#8b5cf6"
+                            />
+                            <MetricsChart
+                                ciIdentifier={ci.identifier}
+                                metricName="disk_io_read"
+                                title="磁盘 IO (Read)"
+                                unit="IOPS"
+                                color="#10b981"
+                            />
+                            <MetricsChart
+                                ciIdentifier={ci.identifier}
+                                metricName="disk_io_write"
+                                title="磁盘 IO (Write)"
+                                unit="IOPS"
+                                color="#f59e0b"
+                            />
                         </div>
+                    </div>
+                )}
+
+                {/* 日志 */}
+                {activeTab === 'logs' && (
+                    <div className="p-6">
+                        <LogsViewer ciIdentifier={ci.identifier} />
                     </div>
                 )}
             </div>

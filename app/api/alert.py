@@ -95,7 +95,9 @@ class LogData(BaseModel):
 async def list_alerts(
     level: Optional[str] = None,
     status: Optional[str] = None,
+    ci_identifier: Optional[str] = Query(None, description="配置项标识"),
     ci_id: Optional[int] = None,
+    keyword: Optional[str] = Query(None, description="搜索关键词"),
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
     page: int = Query(1, ge=1),
@@ -107,11 +109,58 @@ async def list_alerts(
     
     - **level**: 可选，按级别筛选 (critical/warning/info)
     - **status**: 可选，按状态筛选 (open/acknowledged/resolved)
-    - **ci_id**: 可选，按配置项筛选
+    - **ci_identifier**: 可选，按配置项标识筛选
     """
+    from app.core.cmdb.es_storage import alert_storage_service
+    
+    offset = (page - 1) * size
+    
+    alerts, total = await alert_storage_service.search_alerts(
+        ci_identifier=ci_identifier,
+        level=level,
+        status=status,
+        keyword=keyword,
+        start_time=start_time,
+        end_time=end_time,
+        offset=offset,
+        limit=size
+    )
+    
+    items = []
+    for alert in alerts:
+        # 时间戳处理
+        alert_time = alert.get("alert_time")
+        if isinstance(alert_time, str):
+            try:
+                alert_time = datetime.fromisoformat(alert_time.replace("Z", "+00:00"))
+            except:
+                alert_time = datetime.now()
+                
+        created_at = alert.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except:
+                created_at = datetime.now()
+                
+        items.append(AlertResponse(
+            id=0, # ES文档无整型ID，暂填0
+            alert_id=alert.get("alert_id") or "",
+            ci_id=alert.get("ci_id"),
+            ci_name=alert.get("ci_identifier"), # 暂用identifier
+            level=alert.get("level", "warning"),
+            title=alert.get("title", ""),
+            content=alert.get("content", ""),
+            status=alert.get("status", "open"),
+            source=alert.get("source"),
+            tags=alert.get("tags"),
+            alert_time=alert_time,
+            created_at=created_at
+        ))
+        
     return {
-        "items": [],
-        "total": 0,
+        "items": items,
+        "total": total,
         "page": page,
         "size": size
     }
