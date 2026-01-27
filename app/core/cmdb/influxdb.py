@@ -27,7 +27,15 @@ class InfluxDBService:
         self.bucket = bucket or settings.influxdb_bucket
         self._client = None
         self._write_api = None
+        self._write_api = None
         self._query_api = None
+    
+    def _format_time(self, dt: datetime) -> str:
+        """格式化时间为Flux接受的RFC3339格式"""
+        if dt.tzinfo is None:
+            # 如果是naive时间，假设为UTC并添加Z
+            return dt.isoformat() + "Z"
+        return dt.isoformat()
     
     def _get_client(self):
         """获取客户端"""
@@ -151,9 +159,12 @@ class InfluxDBService:
             end_time = end_time or datetime.now()
             
             # Flux查询语句
+            start_str = self._format_time(start_time)
+            end_str = self._format_time(end_time)
+            
             query = f'''
                 from(bucket: "{self.bucket}")
-                |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+                |> range(start: time(v: "{start_str}"), stop: time(v: "{end_str}"))
                 |> filter(fn: (r) => r["ci_identifier"] == "{ci_identifier}")
                 |> filter(fn: (r) => r["metric"] == "{metric_name}")
                 |> aggregateWindow(every: {window}, fn: {aggregation}, createEmpty: false)

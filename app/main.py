@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
 
     # 初始化告警/监控/日志消费者
     from app.core.cmdb.kafka_consumer import kafka_consumer
+    from app.core.cmdb.es_storage import alert_storage_service, log_storage_service
+    
+    # 初始化ES索引模板
+    try:
+        await alert_storage_service.init_index()
+        await log_storage_service.init_index()
+        logger.info("ES indices initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize ES indices: {e}")
+        
     import asyncio
     asyncio.create_task(kafka_consumer.start())
     
