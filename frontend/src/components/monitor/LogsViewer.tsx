@@ -21,6 +21,8 @@ export function LogsViewer({ ciIdentifier }: LogsViewerProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [keyword, setKeyword] = useState("");
+    const [startTime, setStartTime] = useState<string>("");
+    const [endTime, setEndTime] = useState<string>("");
 
     const fetchLogs = async () => {
         if (!ciIdentifier) return;
@@ -31,7 +33,9 @@ export function LogsViewer({ ciIdentifier }: LogsViewerProps) {
             const res = await getLogs({
                 ci_identifier: ciIdentifier,
                 keyword,
-                size: 50
+                size: 50,
+                start_time: startTime ? new Date(startTime).toISOString() : undefined,
+                end_time: endTime ? new Date(endTime).toISOString() : undefined
             });
             setLogs(res.items);
         } catch (err: any) {
@@ -53,8 +57,8 @@ export function LogsViewer({ ciIdentifier }: LogsViewerProps) {
     return (
         <div className="space-y-4">
             {/* Toolbar */}
-            <div className="flex gap-2">
-                <form onSubmit={handleSearch} className="flex-1 relative">
+            <div className="flex flex-wrap gap-2 items-center">
+                <form onSubmit={handleSearch} className="flex-1 relative min-w-[200px]">
                     <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                     <input
                         className="input w-full pl-9 h-10"
@@ -63,9 +67,29 @@ export function LogsViewer({ ciIdentifier }: LogsViewerProps) {
                         onChange={(e) => setKeyword(e.target.value)}
                     />
                 </form>
-                <button onClick={fetchLogs} className="btn-outline h-10 px-4" title="刷新">
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="datetime-local"
+                        className="input h-10 w-44 text-sm"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        placeholder="开始时间"
+                    />
+                    <span className="text-muted-foreground">-</span>
+                    <input
+                        type="datetime-local"
+                        className="input h-10 w-44 text-sm"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        placeholder="结束时间"
+                    />
+                    <button onClick={fetchLogs} className="btn-primary h-10 px-4 flex items-center gap-2">
+                        查询
+                    </button>
+                    <button onClick={() => { setKeyword(""); setStartTime(""); setEndTime(""); fetchLogs(); }} className="btn-outline h-10 px-4" title="重置">
+                        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
             </div>
 
             {/* Logs Console */}

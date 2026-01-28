@@ -34,18 +34,71 @@ export function MetricsChart({
     const [data, setData] = useState<MetricPoint[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [timeRange, setTimeRange] = useState<string>("24h");
+    const [customStart, setCustomStart] = useState<string>("");
+    const [customEnd, setCustomEnd] = useState<string>("");
+
+    const ranges = [
+        { label: "6H", value: "6h" },
+        { label: "24H", value: "24h" },
+        { label: "7D", value: "7d" },
+        { label: "1M", value: "1m" },
+        { label: "自定义", value: "custom" },
+    ];
 
     const fetchData = async () => {
         try {
             setLoading(true);
             setError(null);
-            // Default query last 24 hours mostly
-            const res = await getMetrics({
+
+            let hours = 12;
+            let start_time: string | undefined = undefined;
+            let end_time: string | undefined = undefined;
+            let window = "5m";
+
+            if (timeRange === "custom") {
+                if (!customStart) {
+                    // If custom is selected but no date picked, don't fetch or fetch default? 
+                    // Let's just return if not ready
+                    setLoading(false);
+                    return;
+                }
+                start_time = new Date(customStart).toISOString();
+                if (customEnd) {
+                    end_time = new Date(customEnd).toISOString();
+                }
+                // Determine window based on range? 
+                // Simple logic: > 7 days -> 1h, > 24h -> 30m, else 5m
+                const duration = new Date(end_time || new Date().toISOString()).getTime() - new Date(start_time).getTime();
+                const hoursDiff = duration / (1000 * 60 * 60);
+                if (hoursDiff > 24 * 7) window = "1h";
+                else if (hoursDiff > 24) window = "30m";
+            } else {
+                switch (timeRange) {
+                    case "6h": hours = 6; window = "1m"; break;
+                    case "24h": hours = 24; window = "5m"; break;
+                    case "7d": hours = 24 * 7; window = "1h"; break;
+                    case "1m": hours = 24 * 30; window = "4h"; break;
+                    default: hours = 24;
+                }
+            }
+
+            // If custom range and we have start_time/end_time, pass those
+            // Otherwise pass hours
+            const params: any = {
                 ci_identifier: ciIdentifier,
                 metric_name: metricName,
-                hours: 12, // Last 12 hours
-                window: "5m" // 5 min aggregation
-            });
+                window: window
+            };
+
+            if (timeRange === "custom") {
+                params.start_time = start_time;
+                params.end_time = end_time;
+            } else {
+                params.hours = hours;
+            }
+
+            const res = await getMetrics(params);
             setData(res.data);
         } catch (err: any) {
             setError(err.message || "加载数据失败");
@@ -56,9 +109,11 @@ export function MetricsChart({
 
     useEffect(() => {
         if (ciIdentifier && metricName) {
-            fetchData();
+            if (timeRange !== 'custom' || (customStart)) {
+                fetchData();
+            }
         }
-    }, [ciIdentifier, metricName]);
+    }, [ciIdentifier, metricName, timeRange, customStart, customEnd]); // Re-fetch on range change
 
     if (loading && data.length === 0) {
         return (
@@ -100,10 +155,43 @@ export function MetricsChart({
 
     return (
         <div className="w-full bg-card border border-border rounded-lg p-4">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                 <h3 className="text-sm font-medium text-foreground">
                     {title || metricName} {unit ? `(${unit})` : ''}
                 </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex bg-muted rounded-md p-0.5">
+                        {ranges.map((r) => (
+                            <button
+                                key={r.value}
+                                onClick={() => setTimeRange(r.value)}
+                                className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-all ${timeRange === r.value
+                                        ? "bg-background text-foreground shadow-sm"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                                    }`}
+                            >
+                                {r.label}
+                            </button>
+                        ))}
+                    </div>
+                    {timeRange === 'custom' && (
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="datetime-local"
+                                className="input h-7 text-xs w-36 px-1"
+                                value={customStart}
+                                onChange={e => setCustomStart(e.target.value)}
+                            />
+                            <span className="text-muted-foreground text-xs">-</span>
+                            <input
+                                type="datetime-local"
+                                className="input h-7 text-xs w-36 px-1"
+                                value={customEnd}
+                                onChange={e => setCustomEnd(e.target.value)}
+                            />
+                        </div>
+                    )}
+                </div>
             </div>
             <div style={{ width: '100%', height: height - 60 }}>
                 <ResponsiveContainer>
