@@ -2,7 +2,7 @@
 告警分析 API
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -23,6 +23,9 @@ from app.core.alert.analyzer import alert_enricher
 from app.core.alert.llm_analyzer import llm_alert_analyzer
 from app.core.alert.recommender import solution_recommender
 from app.core.cmdb.influxdb import influxdb_service
+from app.models.alert import Alert, AlertAnalysis
+from sqlalchemy.future import select
+from sqlalchemy import update, delete
 
 class AlertCreate(BaseModel):
     """告警创建请求"""
@@ -252,11 +255,39 @@ async def resolve_alert(
 @router.get("/{alert_id}/analysis", response_model=AlertAnalysisResponse, summary="获取告警分析结果")
 async def get_alert_analysis(
     alert_id: str, 
+    force_refresh: bool = False,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取告警的智能分析结果"""
-    # 1. 获取告警数据
+    """
+    获取告警的智能分析结果
+    
+    默认情况下，如果已存在分析结果则直接返回（缓存）。
+    使用 `force_refresh=true` 可强制重新分析。
+    """
+    # 0. 检查是否存在缓存的分析结果
+    if not force_refresh:
+        stmt = select(AlertAnalysis).join(Alert).where(Alert.alert_id == alert_id)
+        result = await db.execute(stmt)
+        cached_analysis = result.scalar_one_or_none()
+        
+        if cached_analysis:
+            # 返回缓存结果
+            return AlertAnalysisResponse(
+                alert_id=alert_id,
+                analysis=AnalysisResult(
+                    fault_summary=cached_analysis.fault_summary or "",
+                    possible_causes=cached_analysis.possible_causes or [],
+                    impact_scope=cached_analysis.impact_scope or "",
+                    suggested_actions=cached_analysis.suggested_actions or [],
+                    risk_level=cached_analysis.risk_level or "medium"
+                ),
+                solutions=[], # 可以在DB中也缓存solutions，或者这里重新查RAG（较快）
+                related_performance={}, # 实时数据不缓存
+                related_logs=[]         # 实时数据不缓存
+            )
+
+    # 1. 获取告警数据 (ES)
     client = await alert_storage_service.get_client()
     result = await client.search(
         index=f"{alert_storage_service.index_prefix}-{alert_storage_service.config.name}-*",
@@ -287,6 +318,71 @@ async def get_alert_analysis(
             source=sol.source_doc_name or "知识库",
             relevance_score=sol.relevance_score
         ))
+
+    # 4.1 保存分析结果到数据库 (Persistence)
+    try:
+        # A. 确保Alert在SQL库中存在
+        stmt = select(Alert).where(Alert.alert_id == alert_data.get("alert_id"))
+        result = await db.execute(stmt)
+        sql_alert = result.scalar_one_or_none()
+        
+        if not sql_alert:
+            # 创建新的 Alert 记录
+            alert_time = alert_data.get("alert_time")
+            if isinstance(alert_time, str):
+                try:
+                    alert_time = datetime.fromisoformat(alert_time.replace("Z", "+00:00"))
+                except:
+                    alert_time = datetime.now()
+            
+            sql_alert = Alert(
+                alert_id=alert_data.get("alert_id"),
+                title=alert_data.get("title", ""),
+                content=alert_data.get("content", ""),
+                level=alert_data.get("level", "warning"),
+                status=alert_data.get("status", "open"),
+                alert_time=alert_time,
+                ci_id=context.ci.get("id") if context.ci else None
+            )
+            db.add(sql_alert)
+            await db.flush() # 获取ID
+            
+        # B. 保存/更新 AlertAnalysis
+        # 如果是 force_refresh，可能已经存在需要更新
+        # Check existing using relationship or direct query
+        stmt = select(AlertAnalysis).where(AlertAnalysis.alert_id == sql_alert.id)
+        # Use simple delete-insert or update
+        
+        # Check existing using relationship or direct query
+        stmt = select(AlertAnalysis).where(AlertAnalysis.alert_id == sql_alert.id)
+        result = await db.execute(stmt)
+        existing_analysis = result.scalar_one_or_none()
+        
+        if existing_analysis:
+            existing_analysis.fault_summary = analysis_result.summary
+            existing_analysis.possible_causes = analysis_result.root_causes
+            existing_analysis.impact_scope = analysis_result.impact_scope
+            existing_analysis.suggested_actions = analysis_result.solutions
+            existing_analysis.risk_level = "high" if analysis_result.confidence > 0.8 else "medium"
+            existing_analysis.updated_at = datetime.now()
+        else:
+            new_analysis = AlertAnalysis(
+                alert_id=sql_alert.id,
+                fault_summary=analysis_result.summary,
+                possible_causes=analysis_result.root_causes,
+                impact_scope=analysis_result.impact_scope,
+                suggested_actions=analysis_result.solutions,
+                risk_level="high" if analysis_result.confidence > 0.8 else "medium",
+                analysis_time_ms=0 # TODO
+            )
+            db.add(new_analysis)
+            
+        await db.commit()
+    except Exception as e:
+        # 记录错误但不阻塞返回（非关键路径）
+        # logger.error(f"Failed to persist analysis: {e}") 
+        # print(f"Failed to persist analysis: {e}")
+        pass
 
     return AlertAnalysisResponse(
         alert_id=alert_data.get("alert_id"),

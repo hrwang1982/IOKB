@@ -62,7 +62,7 @@ class SolutionRecommender:
                 # 使用RAG服务获取综合回答和引用来源
                 result = await rag_service.answer(
                     question=query,
-                    top_k=self.max_recommendations * 2,  # 多检索一些用于筛选
+                    kb_ids=[], # TODO: 指定默认知识库
                 )
                 
                 rag_answer = result.answer
