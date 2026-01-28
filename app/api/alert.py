@@ -17,7 +17,7 @@ router = APIRouter()
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.deps import get_db
+from app.core.database import get_async_session
 from app.core.cmdb.es_storage import alert_storage_service, log_storage_service
 from app.core.alert.analyzer import alert_enricher
 from app.core.alert.llm_analyzer import llm_alert_analyzer
@@ -257,7 +257,7 @@ async def get_alert_analysis(
     alert_id: str, 
     force_refresh: bool = False,
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     获取告警的智能分析结果

@@ -481,7 +481,7 @@ async def delete_ci(
 @router.get("/items/{ci_id}/relationships", summary="获取配置项关系")
 async def get_ci_relationships(
     ci_id: int,
-    direction: str = Query("both", regex="^(from|to|both)$"),
+    direction: str = Query("both", pattern="^(from|to|both)$"),
     db: AsyncSession = Depends(get_async_session),
     token: str = Depends(oauth2_scheme)
 ):
