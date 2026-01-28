@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
     AlertTriangle,
@@ -17,110 +17,124 @@ import {
     Server,
     TrendingUp,
     Zap,
+    Loader2,
 } from 'lucide-react';
-
-// 模拟告警详情数据
-const alertData = {
-    id: 'ALT-2026-001',
-    title: 'CPU使用率超过90%',
-    content: '服务器 server-prod-001 的CPU使用率达到92%，持续5分钟。这是一个需要立即关注的问题。',
-    level: 'critical',
-    status: 'open',
-    source: 'Prometheus',
-    ci: {
-        id: 1,
-        name: 'server-prod-001',
-        type: '物理服务器',
-        ip: '192.168.1.100',
-        os: 'CentOS 7.9',
-        cpu: '32核',
-        memory: '128GB',
-    },
-    alertTime: '2026-01-18 16:30:00',
-    createTime: '2026-01-18 16:30:05',
-};
-
-// 智能分析结果
-const analysisResult = {
-    summary: 'CPU使用率异常升高，可能由应用负载增加或存在性能问题的进程导致。建议立即排查高CPU占用进程。',
-    rootCauses: [
-        { cause: '应用负载增加', probability: 0.45 },
-        { cause: '存在死循环或性能问题的代码', probability: 0.30 },
-        { cause: '后台任务占用过多资源', probability: 0.15 },
-        { cause: '系统被入侵', probability: 0.10 },
-    ],
-    impact: '可能影响该服务器上运行的所有应用服务，导致响应变慢或服务不可用。',
-    suggestedActions: [
-        '使用 top 或 htop 命令查看高CPU占用进程',
-        '检查应用日志是否有异常',
-        '考虑临时扩容或负载均衡',
-        '排查是否有未授权的进程运行',
-    ],
-    riskLevel: 'high',
-    confidence: 0.85,
-};
-
-// 推荐方案
-const solutions = [
-    {
-        id: 1,
-        title: 'CPU使用率过高处理方案',
-        content: '1. 使用 top -c 命令查看CPU占用最高的进程\n2. 使用 strace 或 perf 分析进程行为\n3. 检查应用日志...',
-        source: '运维知识库',
-        score: 0.92,
-    },
-    {
-        id: 2,
-        title: 'Linux服务器性能优化指南',
-        content: '系统性的服务器性能优化方法，包括CPU、内存、IO等方面的优化建议...',
-        source: '最佳实践文档',
-        score: 0.85,
-    },
-    {
-        id: 3,
-        title: '应用负载问题排查手册',
-        content: '针对应用负载异常的排查步骤和解决方案...',
-        source: '故障处理手册',
-        score: 0.78,
-    },
-];
-
-// 关联性能数据
-const performanceData = [
-    { metric: 'CPU使用率', value: '92%', trend: 'up', color: 'error' },
-    { metric: '内存使用率', value: '65%', trend: 'stable', color: 'warning' },
-    { metric: '磁盘IO', value: '45MB/s', trend: 'up', color: 'primary' },
-    { metric: '网络流量', value: '128Mbps', trend: 'stable', color: 'success' },
-];
-
-// 关联日志
-const relatedLogs = [
-    { time: '16:29:55', level: 'ERROR', message: 'Connection pool exhausted, waiting for available connection...' },
-    { time: '16:29:58', level: 'WARN', message: 'Request processing time exceeded threshold: 5000ms' },
-    { time: '16:30:02', level: 'ERROR', message: 'Database query timeout after 30s' },
-    { time: '16:30:05', level: 'WARN', message: 'High CPU load detected, current: 92%' },
-];
+import {
+    getAlert,
+    getAlertAnalysis,
+    getAlertSolutions,
+    getAlertPerformance,
+    getAlertLogs,
+    Alert,
+    AlertAnalysisResponse,
+    SolutionResult
+} from '@/lib/api';
+import { toast } from 'sonner';
 
 export default function AlertDetailPage({ params }: { params: { id: string } }) {
+    const [loading, setLoading] = useState(true);
     const [analyzing, setAnalyzing] = useState(false);
 
+    // Data States
+    const [alert, setAlert] = useState<Alert | null>(null);
+    const [analysis, setAnalysis] = useState<AlertAnalysisResponse | null>(null);
+    const [solutions, setSolutions] = useState<SolutionResult[]>([]);
+    const [performance, setPerformance] = useState<any[]>([]);
+    const [logs, setLogs] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // 1. Fetch Basic Alert Info
+                const alertData = await getAlert(params.id);
+                setAlert(alertData);
+
+                // 2. Parallel fetch for other context
+                // We don't block the main UI on these, but for simplicity here we assume they load relatively fast or we could load them separately.
+                // Better UX: Load alert first, then others.
+
+                Promise.all([
+                    getAlertAnalysis(params.id).catch(err => null),
+                    getAlertSolutions(params.id).catch(err => []),
+                    getAlertPerformance(params.id).catch(err => ({ metrics: [] })),
+                    getAlertLogs(params.id).catch(err => ({ logs: [] }))
+                ]).then(([analysisData, solutionsData, perfData, logsData]) => {
+                    if (analysisData) setAnalysis(analysisData as AlertAnalysisResponse);
+                    if (solutionsData) setSolutions(solutionsData as SolutionResult[]);
+                    if (perfData) setPerformance((perfData as any).metrics || []);
+                    if (logsData) setLogs((logsData as any).logs || []);
+                });
+
+            } catch (error) {
+                console.error('Error fetching alert details:', error);
+                toast.error('获取告警详情失败');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (params.id) {
+            fetchData();
+        }
+    }, [params.id]);
+
     const handleReanalyze = async () => {
+        if (!process.env.NEXT_PUBLIC_ENABLE_REAL_ANALYSIS) {
+            // Mock re-analysis effect if not enabled, or just call API
+        }
+
         setAnalyzing(true);
-        await new Promise((r) => setTimeout(r, 2000));
-        setAnalyzing(false);
+        try {
+            const analysisData = await getAlertAnalysis(params.id);
+            setAnalysis(analysisData);
+            toast.success('智能分析已更新');
+
+            // Also refresh solutions as they might depend on analysis
+            const solutionsData = await getAlertSolutions(params.id);
+            setSolutions(solutionsData);
+
+        } catch (error) {
+            console.error('Analysis failed:', error);
+            toast.error('分析失败，请稍后重试');
+        } finally {
+            setAnalyzing(false);
+        }
     };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (!alert) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen space-y-4">
+                <h1 className="text-2xl font-bold">告警不存在或无权限访问</h1>
+                <Link href="/alerts" className="btn-primary">返回列表</Link>
+            </div>
+        );
+    }
 
     const levelConfig = {
-        critical: { label: '紧急', className: 'alert-critical', icon: AlertTriangle },
-        warning: { label: '警告', className: 'alert-warning', icon: Clock },
-        info: { label: '信息', className: 'alert-info', icon: CheckCircle },
+        critical: { label: '紧急', className: 'text-error border-error/30 bg-error/10', icon: AlertTriangle },
+        warning: { label: '警告', className: 'text-warning border-warning/30 bg-warning/10', icon: Clock },
+        info: { label: '信息', className: 'text-primary border-primary/30 bg-primary/10', icon: CheckCircle },
     };
 
-    const level = levelConfig[alertData.level as keyof typeof levelConfig];
+    const level = levelConfig[alert.level as keyof typeof levelConfig] || levelConfig.info;
     const LevelIcon = level.icon;
 
+    // Helper for formatting date
+    const formatDate = (dateString: string) => {
+        try { return new Date(dateString).toLocaleString('zh-CN'); } catch { return dateString; }
+    };
+
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-12">
             {/* 面包屑 */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Link href="/alerts" className="hover:text-primary flex items-center gap-1">
@@ -128,36 +142,36 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                     告警列表
                 </Link>
                 <ChevronRight className="h-4 w-4" />
-                <span className="text-foreground">{alertData.id}</span>
+                <span className="text-foreground">{alert.alert_id}</span>
             </div>
 
             {/* 告警标题栏 */}
             <div className="card p-6">
                 <div className="flex items-start justify-between">
                     <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-lg ${level.className}`}>
-                            <LevelIcon className="h-6 w-6" />
+                        <div className={`p-3 rounded-lg ${level.className.split(' ')[2]}`}> {/* Use bg color */}
+                            <LevelIcon className={`h-6 w-6 ${level.className.split(' ')[0]}`} />
                         </div>
                         <div>
                             <div className="flex items-center gap-3">
-                                <h1 className="text-xl font-bold text-foreground">{alertData.title}</h1>
+                                <h1 className="text-xl font-bold text-foreground">{alert.title}</h1>
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${level.className}`}>
                                     {level.label}
                                 </span>
                             </div>
-                            <p className="text-muted-foreground mt-2">{alertData.content}</p>
+                            <p className="text-muted-foreground mt-2">{alert.content}</p>
                             <div className="flex items-center gap-6 mt-4 text-sm text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                     <Clock className="h-4 w-4" />
-                                    {alertData.alertTime}
+                                    {formatDate(alert.alert_time)}
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <Server className="h-4 w-4" />
-                                    {alertData.ci.name}
+                                    {alert.ci_name || alert.tags?.ci_identifier}
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <Database className="h-4 w-4" />
-                                    {alertData.source}
+                                    {alert.source}
                                 </span>
                             </div>
                         </div>
@@ -188,67 +202,64 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                                 {analyzing ? '分析中...' : '重新分析'}
                             </button>
                         </div>
-                        <div className="p-6 space-y-6">
-                            {/* 摘要 */}
-                            <div>
-                                <h3 className="text-sm font-medium text-muted-foreground mb-2">问题摘要</h3>
-                                <p className="text-foreground">{analysisResult.summary}</p>
-                            </div>
 
-                            {/* 可能原因 */}
-                            <div>
-                                <h3 className="text-sm font-medium text-muted-foreground mb-3">可能原因</h3>
-                                <div className="space-y-2">
-                                    {analysisResult.rootCauses.map((cause, index) => (
-                                        <div key={index} className="flex items-center gap-3">
-                                            <div className="flex-1">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-sm text-foreground">{cause.cause}</span>
-                                                    <span className="text-sm text-muted-foreground">
-                                                        {Math.round(cause.probability * 100)}%
-                                                    </span>
-                                                </div>
-                                                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-primary rounded-full transition-all"
-                                                        style={{ width: `${cause.probability * 100}%` }}
-                                                    />
-                                                </div>
+                        {analysis ? (
+                            <div className="p-6 space-y-6">
+                                {/* 摘要 */}
+                                <div>
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-2">问题摘要</h3>
+                                    <p className="text-foreground">{analysis.analysis.fault_summary}</p>
+                                </div>
+
+                                {/* 可能原因 */}
+                                <div>
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-3">可能原因</h3>
+                                    <div className="space-y-2">
+                                        {analysis.analysis.possible_causes.map((cause, index) => (
+                                            <div key={index} className="flex items-start gap-2">
+                                                <div className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                                <span className="text-sm text-foreground">{cause}</span>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* 影响范围 */}
+                                <div>
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-2">影响范围</h3>
+                                    <p className="text-foreground">{analysis.analysis.impact_scope}</p>
+                                </div>
+
+                                {/* 建议措施 */}
+                                <div>
+                                    <h3 className="text-sm font-medium text-muted-foreground mb-3">建议措施</h3>
+                                    <ol className="space-y-2">
+                                        {analysis.analysis.suggested_actions.map((action, index) => (
+                                            <li key={index} className="flex items-start gap-2 text-foreground">
+                                                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-medium shrink-0 mt-0.5">
+                                                    {index + 1}
+                                                </span>
+                                                {action}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </div>
+
+                                {/* 风险等级 */}
+                                <div className="pt-4 border-t border-border flex items-center justify-between">
+                                    <span className="text-sm text-muted-foreground">风险等级</span>
+                                    <span className={`text-sm font-medium ${analysis.analysis.risk_level === 'high' ? 'text-error' :
+                                            analysis.analysis.risk_level === 'medium' ? 'text-warning' : 'text-primary'
+                                        }`}>
+                                        {analysis.analysis.risk_level.toUpperCase()}
+                                    </span>
                                 </div>
                             </div>
-
-                            {/* 影响范围 */}
-                            <div>
-                                <h3 className="text-sm font-medium text-muted-foreground mb-2">影响范围</h3>
-                                <p className="text-foreground">{analysisResult.impact}</p>
+                        ) : (
+                            <div className="p-8 text-center text-muted-foreground">
+                                {analyzing ? '正在分析告警根因...' : '暂无分析结果，请点击重新分析'}
                             </div>
-
-                            {/* 建议措施 */}
-                            <div>
-                                <h3 className="text-sm font-medium text-muted-foreground mb-3">建议措施</h3>
-                                <ol className="space-y-2">
-                                    {analysisResult.suggestedActions.map((action, index) => (
-                                        <li key={index} className="flex items-start gap-2 text-foreground">
-                                            <span className="flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-medium shrink-0 mt-0.5">
-                                                {index + 1}
-                                            </span>
-                                            {action}
-                                        </li>
-                                    ))}
-                                </ol>
-                            </div>
-
-                            {/* 置信度 */}
-                            <div className="pt-4 border-t border-border flex items-center justify-between">
-                                <span className="text-sm text-muted-foreground">分析置信度</span>
-                                <span className="text-sm font-medium text-primary">
-                                    {Math.round(analysisResult.confidence * 100)}%
-                                </span>
-                            </div>
-                        </div>
+                        )}
                     </div>
 
                     {/* 推荐方案 */}
@@ -258,7 +269,7 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                             <h2 className="font-semibold text-foreground">推荐处理方案</h2>
                         </div>
                         <div className="divide-y divide-border">
-                            {solutions.map((solution) => (
+                            {solutions.length > 0 ? solutions.map((solution) => (
                                 <div
                                     key={solution.id}
                                     className="p-4 hover:bg-accent/5 transition-colors cursor-pointer"
@@ -278,13 +289,17 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                                         </div>
                                         <div className="ml-4 text-right">
                                             <div className="text-lg font-bold text-primary">
-                                                {Math.round(solution.score * 100)}%
+                                                {Math.round(solution.relevance_score * 100)}%
                                             </div>
                                             <div className="text-xs text-muted-foreground">匹配度</div>
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="p-6 text-center text-muted-foreground text-sm">
+                                    暂无推荐方案
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -295,22 +310,21 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                             <h2 className="font-semibold text-foreground">关联日志</h2>
                         </div>
                         <div className="p-4 font-mono text-sm bg-dark-bg rounded-b-lg overflow-x-auto">
-                            {relatedLogs.map((log, index) => (
+                            {logs.length > 0 ? logs.map((log, index) => (
                                 <div key={index} className="flex gap-4 py-1">
-                                    <span className="text-muted-foreground shrink-0">{log.time}</span>
+                                    <span className="text-muted-foreground shrink-0">{formatDate(log.timestamp).split(' ')[1]}</span>
                                     <span
-                                        className={`shrink-0 ${log.level === 'ERROR'
-                                                ? 'text-error'
-                                                : log.level === 'WARN'
-                                                    ? 'text-warning'
-                                                    : 'text-muted-foreground'
+                                        className={`shrink-0 ${log.log_level === 'error' || log.log_level === 'critical' ? 'text-error' :
+                                                log.log_level === 'warning' ? 'text-warning' : 'text-muted-foreground'
                                             }`}
                                     >
-                                        [{log.level}]
+                                        [{log.log_level?.toUpperCase()}]
                                     </span>
-                                    <span className="text-foreground">{log.message}</span>
+                                    <span className="text-foreground whitespace-pre-wrap">{log.message}</span>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="text-muted-foreground text-center">无相关日志数据</div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -325,24 +339,25 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                         </div>
                         <div className="p-4 space-y-3">
                             {[
-                                { label: '名称', value: alertData.ci.name },
-                                { label: '类型', value: alertData.ci.type },
-                                { label: 'IP地址', value: alertData.ci.ip },
-                                { label: '操作系统', value: alertData.ci.os },
-                                { label: 'CPU', value: alertData.ci.cpu },
-                                { label: '内存', value: alertData.ci.memory },
+                                { label: '标识符', value: alert.ci_name || alert.tags?.ci_identifier },
+                                { label: '类型', value: alert.tags?.ci_type },
+                                { label: '来源', value: alert.source },
                             ].map((item) => (
-                                <div key={item.label} className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">{item.label}</span>
-                                    <span className="text-foreground">{item.value}</span>
-                                </div>
+                                item.value && (
+                                    <div key={item.label} className="flex justify-between text-sm">
+                                        <span className="text-muted-foreground">{item.label}</span>
+                                        <span className="text-foreground">{item.value}</span>
+                                    </div>
+                                )
                             ))}
-                            <Link
-                                href={`/cmdb/${alertData.ci.id}`}
-                                className="block pt-3 border-t border-border text-sm text-primary hover:underline"
-                            >
-                                查看配置项详情 →
-                            </Link>
+                            {alert.ci_id && (
+                                <Link
+                                    href={`/cmdb/${alert.ci_id}`}
+                                    className="block pt-3 border-t border-border text-sm text-primary hover:underline"
+                                >
+                                    查看配置项详情 →
+                                </Link>
+                            )}
                         </div>
                     </div>
 
@@ -350,32 +365,29 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                     <div className="card">
                         <div className="p-4 border-b border-border flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                            <h2 className="font-semibold text-foreground">实时性能</h2>
+                            <h2 className="font-semibold text-foreground">关联指标 (近1小时)</h2>
                         </div>
                         <div className="p-4 space-y-4">
-                            {performanceData.map((item) => (
-                                <div key={item.metric}>
+                            {performance.length > 0 ? performance.slice(0, 5).map((item, i) => (
+                                <div key={i}>
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className="text-sm text-muted-foreground">{item.metric}</span>
-                                        <span className={`text-sm font-medium text-${item.color}`}>
-                                            {item.value}
+                                        <span className="text-sm text-muted-foreground">{item.metric_name}</span>
+                                        <span className="text-sm font-medium text-foreground">
+                                            {Number(item.value).toFixed(2)} {item.unit}
                                         </span>
                                     </div>
                                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                                         <div
-                                            className={`h-full bg-${item.color} rounded-full`}
+                                            className="h-full bg-primary rounded-full"
                                             style={{
-                                                width:
-                                                    item.metric === 'CPU使用率'
-                                                        ? '92%'
-                                                        : item.metric === '内存使用率'
-                                                            ? '65%'
-                                                            : '45%',
+                                                width: `${Math.min(item.value, 100)}%`
                                             }}
                                         />
                                     </div>
                                 </div>
-                            ))}
+                            )) : (
+                                <div className="text-sm text-muted-foreground text-center">暂无性能数据</div>
+                            )}
                         </div>
                     </div>
 
