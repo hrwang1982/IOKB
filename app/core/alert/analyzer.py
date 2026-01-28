@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from app.core.cmdb.service import ci_service
+from app.core.cmdb.service import ci_service, relationship_service
 from app.core.cmdb.es_storage import alert_storage_service, log_storage_service
 from app.core.cmdb.influxdb import influxdb_service
 
@@ -22,6 +22,7 @@ class AlertContext:
     related_alerts: List[Dict[str, Any]] = None
     performance_data: List[Dict[str, Any]] = None
     related_logs: List[Dict[str, Any]] = None
+    topology: Dict[str, List] = None  # Add topology field
     
     def __post_init__(self):
         if self.related_alerts is None:
@@ -30,6 +31,8 @@ class AlertContext:
             self.performance_data = []
         if self.related_logs is None:
             self.related_logs = []
+        if self.topology is None:
+            self.topology = {"upstream": [], "downstream": []}
 
 
 class AlertEnricher:
@@ -82,6 +85,59 @@ class AlertEnricher:
                         "status": ci.status,
                         "attributes": ci.attributes,
                     }
+                    
+                    # 1.1 获取拓扑关系 (Upstream/Downstream)
+                    try:
+                        rels = await relationship_service.get_relationships(db_session, ci.id, "both")
+                        # 转换关联的CI信息，方便Prompt使用
+                        # 注意：get_relationships 返回的是 Relationship 对象，我们需要额外获取关联CI的详情
+                        # 这里简单处理，只拿ID和Type如果可能，或者Relationship对象里有名称缓存？
+                        # 查看 service.py: RelationshipService 返回 CIRelationship，模型定义在 app/models/cmdb.py
+                        # 通常 CIRelationship 模型会有 from_ci / to_ci 关系加载，如果 service 没有 eager load，可能需要额外查询
+                        # 让我们假设 RelationshipService 的查询不够丰富，这里我们稍微扩展一下 context 的 helper
+                        
+                        # 为了性能，这里我们暂且只记录基本信息，分析器如果需要详细信息可能需要进一步查询
+                        # 但为了Prompt效果，我们需要关联CI的 Name 和 Type
+                        pass 
+                        
+                        # 实际上我们需要修改 get_relationships 或在这里手动查询关联CI
+                        # 重新看 service.py，get_relationships 只是简单 select，没有 join CI
+                        # 我们直接在这里做个简单的循环查询吧，或者依赖 relationship_service 改进
+                        # 鉴于不能改太多文件，我们在 AlertEnricher 里做个简单补全
+                        
+                        upstream_rels = []
+                        for rel in rels["upstream"]:
+                            # rel.from_ci_id 是上游
+                            from_ci = await ci_service.get_by_id(db_session, rel.from_ci_id)
+                            if from_ci:
+                                upstream_rels.append({
+                                    "id": from_ci.id,
+                                    "name": from_ci.name,
+                                    "type": from_ci.ci_type.name if from_ci.ci_type else "Unknown",
+                                    "type_code": from_ci.ci_type.code if from_ci.ci_type else "unknown",
+                                    "rel_type": rel.rel_type
+                                })
+                                
+                        downstream_rels = []
+                        for rel in rels["downstream"]:
+                            # rel.to_ci_id 是下游
+                            to_ci = await ci_service.get_by_id(db_session, rel.to_ci_id)
+                            if to_ci:
+                                downstream_rels.append({
+                                    "id": to_ci.id,
+                                    "name": to_ci.name,
+                                    "type": to_ci.ci_type.name if to_ci.ci_type else "Unknown",
+                                    "type_code": to_ci.ci_type.code if to_ci.ci_type else "unknown",
+                                    "rel_type": rel.rel_type
+                                })
+
+                        context.topology = {
+                            "upstream": upstream_rels,
+                            "downstream": downstream_rels
+                        }
+                    except Exception as e:
+                        logger.warning(f"获取拓扑关系失败: {e}")
+
             except Exception as e:
                 logger.warning(f"关联CMDB失败: {ci_identifier}, {e}")
         

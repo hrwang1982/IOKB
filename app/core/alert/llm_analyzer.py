@@ -138,6 +138,27 @@ class LLMAlertAnalyzer:
                 log_lines.append(f"- [{log.get('log_level')}] {msg}")
             related_logs = "\n".join(log_lines)
         
+        # 拓扑关系
+        topology_info = "无关联拓扑信息"
+        if context.topology and (context.topology.get("upstream") or context.topology.get("downstream")):
+            topo_lines = []
+            
+            # 上游（影响分析）
+            upstream = context.topology.get("upstream", [])
+            if upstream:
+                topo_lines.append("上游依赖（可能受影响的业务/服务）:")
+                for item in upstream:
+                    topo_lines.append(f"  - [{item.get('type')}] {item.get('name')} (关系: {item.get('rel_type')})")
+            
+            # 下游（根因分析）
+            downstream = context.topology.get("downstream", [])
+            if downstream:
+                topo_lines.append("下游依赖（可能的故障根因）:")
+                for item in downstream:
+                    topo_lines.append(f"  - [{item.get('type')}] {item.get('name')} (关系: {item.get('rel_type')})")
+            
+            topology_info = "\n".join(topo_lines)
+        
         return self.user_prompt_template.format(
             alert_id=alert.get("alert_id", "N/A"),
             level=alert.get("level", "N/A"),
@@ -152,6 +173,7 @@ class LLMAlertAnalyzer:
             performance_data=performance_data,
             log_count=len(context.related_logs),
             related_logs=related_logs,
+            topology_info=topology_info,  # Add topology info to format
         )
     
     def _parse_response(self, response: LLMResponse) -> AnalysisResult:

@@ -100,6 +100,9 @@ prompts:
     ## 关联的配置项信息
     {ci_info}
 
+    ## 服务拓扑 / 依赖关系
+    {topology_info}
+
     ## 近期相关告警（{related_count}条）
     {related_alerts}
 

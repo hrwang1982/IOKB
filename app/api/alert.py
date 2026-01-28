@@ -16,6 +16,8 @@ router = APIRouter()
 # ==================== 数据模型 ====================
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.deps import get_db
 from app.core.cmdb.es_storage import alert_storage_service, log_storage_service
 from app.core.alert.analyzer import alert_enricher
 from app.core.alert.llm_analyzer import llm_alert_analyzer
@@ -248,7 +250,11 @@ async def resolve_alert(
 # ==================== 智能分析 ====================
 
 @router.get("/{alert_id}/analysis", response_model=AlertAnalysisResponse, summary="获取告警分析结果")
-async def get_alert_analysis(alert_id: str, token: str = Depends(oauth2_scheme)):
+async def get_alert_analysis(
+    alert_id: str, 
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+):
     """获取告警的智能分析结果"""
     # 1. 获取告警数据
     client = await alert_storage_service.get_client()
@@ -263,7 +269,7 @@ async def get_alert_analysis(alert_id: str, token: str = Depends(oauth2_scheme))
     alert_data = hits[0]["_source"]
     
     # 2. 丰富上下文
-    context = await alert_enricher.enrich(alert_data)
+    context = await alert_enricher.enrich(alert_data, db_session=db)
     
     # 3. LLM 分析
     analysis_result = await llm_alert_analyzer.analyze(context)
