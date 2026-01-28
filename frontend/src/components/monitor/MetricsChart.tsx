@@ -63,9 +63,9 @@ export function MetricsChart({
                     setLoading(false);
                     return;
                 }
-                start_time = new Date(customStart).toISOString();
+                start_time = customStart;
                 if (customEnd) {
-                    end_time = new Date(customEnd).toISOString();
+                    end_time = customEnd;
                 }
                 // Determine window based on range? 
                 // Simple logic: > 7 days -> 1h, > 24h -> 30m, else 5m
@@ -166,8 +166,8 @@ export function MetricsChart({
                                 key={r.value}
                                 onClick={() => setTimeRange(r.value)}
                                 className={`px-2.5 py-1 text-xs font-medium rounded-sm transition-all ${timeRange === r.value
-                                        ? "bg-background text-foreground shadow-sm"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                                    ? "bg-background text-foreground shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-background/50"
                                     }`}
                             >
                                 {r.label}
