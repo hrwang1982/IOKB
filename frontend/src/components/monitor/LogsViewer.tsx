@@ -34,8 +34,8 @@ export function LogsViewer({ ciIdentifier }: LogsViewerProps) {
                 ci_identifier: ciIdentifier,
                 keyword,
                 size: 50,
-                start_time: startTime ? new Date(startTime).toISOString() : undefined,
-                end_time: endTime ? new Date(endTime).toISOString() : undefined
+                start_time: startTime || undefined,
+                end_time: endTime || undefined
             });
             setLogs(res.items);
         } catch (err: any) {

@@ -35,8 +35,8 @@ export function AlertsTable({ ciIdentifier }: AlertsTableProps) {
         getAlerts({
             ci_identifier: ciIdentifier,
             size: 20,
-            start_time: startTime ? new Date(startTime).toISOString() : undefined,
-            end_time: endTime ? new Date(endTime).toISOString() : undefined,
+            start_time: startTime || undefined,
+            end_time: endTime || undefined,
             level: level || undefined,
             status: status || undefined
         })
