@@ -57,10 +57,12 @@ class LLMAlertAnalyzer:
         ]
         
         try:
+            logger.info(f"=== 开始调用大模型进行告警智能分析: alert_id={context.alert.get('alert_id')} ===")
             response = await llm_service.chat(
                 messages,
                 temperature=self.temperature,
             )
+            logger.info(f"=== 告警智能分析调用结束: alert_id={context.alert.get('alert_id')} ===")
             
             # 解析响应
             result = self._parse_response(response)

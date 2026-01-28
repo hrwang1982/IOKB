@@ -60,10 +60,12 @@ class SolutionRecommender:
         try:
             if self.use_rag_answer:
                 # 使用RAG服务获取综合回答和引用来源
+                logger.info(f"=== 开始调用大模型进行方案推荐(RAG): query={query[:30]}... ===")
                 result = await rag_service.answer(
                     question=query,
                     kb_ids=[], # TODO: 指定默认知识库
                 )
+                logger.info(f"=== 方案推荐(RAG)调用结束 ===")
                 
                 rag_answer = result.answer
                 
