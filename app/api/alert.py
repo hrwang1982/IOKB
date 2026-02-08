@@ -525,11 +525,15 @@ async def get_alert_performance(
 @router.get("/{alert_id}/logs", summary="获取关联日志")
 async def get_alert_logs(
     alert_id: str,
-    hours: int = Query(1, ge=1, le=24),
+    hours: int = Query(1, ge=1, le=24), # 保留参数兼容性，但逻辑已变更为基于告警时间
     limit: int = Query(100, ge=1, le=1000),
     token: str = Depends(oauth2_scheme)
 ):
-    """获取告警关联的日志数据"""
+    """
+    获取告警关联的日志数据
+    
+    时间范围：告警发生时间前55分钟 ~ 后5分钟
+    """
     # 1. 获取告警
     client = await alert_storage_service.get_client()
     result = await client.search(
@@ -546,8 +550,22 @@ async def get_alert_logs(
     if not ci_identifier:
         return {"logs": []}
         
-    end_time = datetime.now()
-    start_time = end_time - timedelta(hours=hours)
+    # 2. 计算时间范围：alert_time - 55m ~ alert_time + 5m
+    raw_time = alert_data.get("alert_time")
+    alert_time = datetime.now() # Default fallback
+    
+    if isinstance(raw_time, datetime):
+        alert_time = raw_time
+    elif isinstance(raw_time, str):
+        try:
+            alert_time = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        except:
+            pass # Use default now() if parsing fails
+        
+    # Python datetime is timezone-aware if fromisoformat parsed timezone, 
+    # ensuring calculation is correct.
+    end_time = alert_time + timedelta(minutes=5)
+    start_time = alert_time - timedelta(minutes=55)
     
     logs, total = await log_storage_service.search_logs(
         ci_identifier=ci_identifier,
