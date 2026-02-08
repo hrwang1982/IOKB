@@ -179,7 +179,11 @@ async def list_alerts(
 
 
 @router.get("/{alert_id}", response_model=AlertResponse, summary="获取告警详情")
-async def get_alert(alert_id: str, token: str = Depends(oauth2_scheme)):
+async def get_alert(
+    alert_id: str, 
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_async_session)
+):
     """获取告警详情"""
     # 使用ES客户端直接查询
     client = await alert_storage_service.get_client()
@@ -195,6 +199,20 @@ async def get_alert(alert_id: str, token: str = Depends(oauth2_scheme)):
             
         alert = hits[0]["_source"]
         
+        # 补全 ci_id
+        ci_id = alert.get("ci_id")
+        ci_identifier = alert.get("ci_identifier")
+        
+        if not ci_id and ci_identifier:
+            try:
+                from app.core.cmdb.service import ci_service
+                ci = await ci_service.get_by_identifier(db, ci_identifier)
+                if ci:
+                    ci_id = ci.id
+            except Exception as e:
+                # 即使查询失败也不影响告警详情返回
+                pass
+
         # 时间处理
         alert_time = alert.get("alert_time")
         if isinstance(alert_time, str):
@@ -213,7 +231,7 @@ async def get_alert(alert_id: str, token: str = Depends(oauth2_scheme)):
         return AlertResponse(
             id=0,
             alert_id=alert.get("alert_id"),
-            ci_id=alert.get("ci_id"),
+            ci_id=ci_id,  # 使用补全后的ID
             ci_name=alert.get("ci_identifier"),
             level=alert.get("level", "warning"),
             title=alert.get("title", ""),

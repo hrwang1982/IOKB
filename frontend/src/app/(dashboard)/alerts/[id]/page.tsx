@@ -318,7 +318,7 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                                         </span>
                                         <span
                                             className={`shrink-0 text-xs font-bold pt-0.5 w-16 ${log.log_level === 'error' || log.log_level === 'critical' ? 'text-red-400' :
-                                                    log.log_level === 'warning' ? 'text-yellow-400' : 'text-zinc-400'
+                                                log.log_level === 'warning' ? 'text-yellow-400' : 'text-zinc-400'
                                                 }`}
                                         >
                                             [{log.log_level?.toUpperCase()}]
@@ -352,14 +352,23 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                         </div>
                         <div className="p-4 space-y-3">
                             {[
-                                { label: '标识符', value: alert.ci_name || alert.tags?.ci_identifier },
+                                { label: '标识符', value: alert.ci_name || alert.tags?.ci_identifier, isLink: true },
                                 { label: '类型', value: alert.tags?.ci_type },
                                 { label: '来源', value: alert.source },
                             ].map((item) => (
                                 item.value && (
                                     <div key={item.label} className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">{item.label}</span>
-                                        <span className="text-foreground">{item.value}</span>
+                                        {item.isLink && alert.ci_id ? (
+                                            <Link
+                                                href={`/cmdb/${alert.ci_id}`}
+                                                className="text-primary hover:underline hover:text-primary/80 transition-colors"
+                                            >
+                                                {item.value}
+                                            </Link>
+                                        ) : (
+                                            <span className="text-foreground">{item.value}</span>
+                                        )}
                                     </div>
                                 )
                             ))}
