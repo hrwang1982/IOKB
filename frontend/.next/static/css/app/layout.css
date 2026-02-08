@@ -889,6 +889,9 @@ body {
 .mt-8{
   margin-top: 2rem;
 }
+.mb-0\.5{
+  margin-bottom: 0.125rem;
+}
 .line-clamp-1{
   overflow: hidden;
   display: -webkit-box;
@@ -1419,6 +1422,9 @@ body {
 .border-warning\/30{
   border-color: rgb(245 158 11 / 0.3);
 }
+.border-blue-400\/20{
+  border-color: rgb(96 165 250 / 0.2);
+}
 .bg-accent\/10{
   background-color: rgb(249 115 22 / 0.1);
 }
@@ -1479,6 +1485,9 @@ body {
 }
 .bg-warning\/5{
   background-color: rgb(245 158 11 / 0.05);
+}
+.bg-blue-400\/10{
+  background-color: rgb(96 165 250 / 0.1);
 }
 .p-0\.5{
   padding: 0.125rem;
@@ -1624,6 +1633,9 @@ body {
 .pt-6{
   padding-top: 1.5rem;
 }
+.pt-0\.5{
+  padding-top: 0.125rem;
+}
 .text-left{
   text-align: left;
 }
@@ -1747,6 +1759,26 @@ body {
 .text-yellow-500{
   --tw-text-opacity: 1;
   color: rgb(234 179 8 / var(--tw-text-opacity, 1));
+}
+.text-blue-400{
+  --tw-text-opacity: 1;
+  color: rgb(96 165 250 / var(--tw-text-opacity, 1));
+}
+.text-slate-200{
+  --tw-text-opacity: 1;
+  color: rgb(226 232 240 / var(--tw-text-opacity, 1));
+}
+.text-yellow-400{
+  --tw-text-opacity: 1;
+  color: rgb(250 204 21 / var(--tw-text-opacity, 1));
+}
+.text-zinc-400{
+  --tw-text-opacity: 1;
+  color: rgb(161 161 170 / var(--tw-text-opacity, 1));
+}
+.text-zinc-500{
+  --tw-text-opacity: 1;
+  color: rgb(113 113 122 / var(--tw-text-opacity, 1));
 }
 .opacity-0{
   opacity: 0;

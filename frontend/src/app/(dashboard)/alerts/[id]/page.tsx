@@ -311,16 +311,28 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                         </div>
                         <div className="p-4 font-mono text-sm bg-dark-bg rounded-b-lg overflow-x-auto">
                             {logs.length > 0 ? logs.map((log, index) => (
-                                <div key={index} className="flex gap-4 py-1">
-                                    <span className="text-muted-foreground shrink-0">{formatDate(log.timestamp).split(' ')[1]}</span>
-                                    <span
-                                        className={`shrink-0 ${log.log_level === 'error' || log.log_level === 'critical' ? 'text-error' :
-                                                log.log_level === 'warning' ? 'text-warning' : 'text-muted-foreground'
-                                            }`}
+                                <div key={index} className="flex gap-4 py-1 items-start">
+                                    <span className="text-zinc-500 shrink-0 select-none w-32 font-mono text-xs pt-0.5">
+                                        {formatDate(log.timestamp)}
+                                    </span>
+                                    <span 
+                                        className={`shrink-0 text-xs font-bold pt-0.5 w-16 ${
+                                            log.log_level === 'error' || log.log_level === 'critical' ? 'text-red-400' :
+                                            log.log_level === 'warning' ? 'text-yellow-400' : 'text-zinc-400'
+                                        }`}
                                     >
                                         [{log.log_level?.toUpperCase()}]
                                     </span>
-                                    <span className="text-foreground whitespace-pre-wrap">{log.message}</span>
+                                    <div className="flex-1 min-w-0">
+                                        {log.source && (
+                                            <span className="inline-block text-xs text-blue-400 mr-2 mb-0.5 px-1.5 py-0.5 rounded bg-blue-400/10 border border-blue-400/20">
+                                                {log.source}
+                                            </span>
+                                        )}
+                                        <span className="text-slate-200 whitespace-pre-wrap break-all">
+                                            {log.message}
+                                        </span>
+                                    </div>
                                 </div>
                             )) : (
                                 <div className="text-muted-foreground text-center">无相关日志数据</div>
