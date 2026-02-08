@@ -511,8 +511,20 @@ async def get_alert_performance(
     # 取常用指标
     target_metrics = ["cpu_usage", "memory_usage", "disk_usage", "network_in", "network_out"]
     
-    end_time = datetime.now()
-    start_time = end_time - timedelta(hours=hours)
+    # 计算时间范围：alert_time - 3h ~ alert_time + 1h
+    raw_time = alert_data.get("alert_time")
+    alert_time = datetime.now() # Default fallback
+    
+    if isinstance(raw_time, datetime):
+        alert_time = raw_time
+    elif isinstance(raw_time, str):
+        try:
+            alert_time = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        except:
+            pass # Use default now() if parsing fails
+
+    end_time = alert_time + timedelta(hours=1)
+    start_time = alert_time - timedelta(hours=3)
     
     all_metrics = []
     for metric in target_metrics:
