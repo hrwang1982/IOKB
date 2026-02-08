@@ -249,7 +249,7 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                                 <div className="pt-4 border-t border-border flex items-center justify-between">
                                     <span className="text-sm text-muted-foreground">风险等级</span>
                                     <span className={`text-sm font-medium ${analysis.analysis.risk_level === 'high' ? 'text-error' :
-                                            analysis.analysis.risk_level === 'medium' ? 'text-warning' : 'text-primary'
+                                        analysis.analysis.risk_level === 'medium' ? 'text-warning' : 'text-primary'
                                         }`}>
                                         {analysis.analysis.risk_level.toUpperCase()}
                                     </span>
@@ -309,34 +309,35 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                             <FileText className="h-5 w-5 text-muted-foreground" />
                             <h2 className="font-semibold text-foreground">关联日志</h2>
                         </div>
-                        <div className="p-4 font-mono text-sm bg-dark-bg rounded-b-lg overflow-x-auto">
-                            {logs.length > 0 ? logs.map((log, index) => (
-                                <div key={index} className="flex gap-4 py-1 items-start">
-                                    <span className="text-zinc-500 shrink-0 select-none w-32 font-mono text-xs pt-0.5">
-                                        {formatDate(log.timestamp)}
-                                    </span>
-                                    <span 
-                                        className={`shrink-0 text-xs font-bold pt-0.5 w-16 ${
-                                            log.log_level === 'error' || log.log_level === 'critical' ? 'text-red-400' :
-                                            log.log_level === 'warning' ? 'text-yellow-400' : 'text-zinc-400'
-                                        }`}
-                                    >
-                                        [{log.log_level?.toUpperCase()}]
-                                    </span>
-                                    <div className="flex-1 min-w-0">
-                                        {log.source && (
-                                            <span className="inline-block text-xs text-blue-400 mr-2 mb-0.5 px-1.5 py-0.5 rounded bg-blue-400/10 border border-blue-400/20">
-                                                {log.source}
-                                            </span>
-                                        )}
-                                        <span className="text-slate-200 whitespace-pre-wrap break-all">
-                                            {log.message}
+                        <div className="font-mono text-sm bg-dark-bg rounded-b-lg overflow-hidden border-t border-white/5">
+                            <div className="max-h-[500px] overflow-auto p-4 space-y-1">
+                                {logs.length > 0 ? logs.map((log, index) => (
+                                    <div key={index} className="flex gap-4 p-2 rounded items-start hover:bg-white/10 even:bg-white/5 transition-colors">
+                                        <span className="text-zinc-500 shrink-0 select-none w-32 font-mono text-xs pt-0.5">
+                                            {formatDate(log.timestamp)}
                                         </span>
+                                        <span
+                                            className={`shrink-0 text-xs font-bold pt-0.5 w-16 ${log.log_level === 'error' || log.log_level === 'critical' ? 'text-red-400' :
+                                                    log.log_level === 'warning' ? 'text-yellow-400' : 'text-zinc-400'
+                                                }`}
+                                        >
+                                            [{log.log_level?.toUpperCase()}]
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            {log.source && (
+                                                <span className="inline-block text-xs text-blue-400 mr-2 mb-0.5 px-1.5 py-0.5 rounded bg-blue-400/10 border border-blue-400/20">
+                                                    {log.source}
+                                                </span>
+                                            )}
+                                            <span className="text-slate-200 whitespace-pre-wrap break-all">
+                                                {log.message}
+                                            </span>
+                                        </div>
                                     </div>
-                                </div>
-                            )) : (
-                                <div className="text-muted-foreground text-center">无相关日志数据</div>
-                            )}
+                                )) : (
+                                    <div className="text-muted-foreground text-center">无相关日志数据</div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

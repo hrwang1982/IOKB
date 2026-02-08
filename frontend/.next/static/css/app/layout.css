@@ -1012,6 +1012,9 @@ body {
 .max-h-\[calc\(80vh-8rem\)\]{
   max-height: calc(80vh - 8rem);
 }
+.max-h-\[500px\]{
+  max-height: 500px;
+}
 .min-h-\[100px\]{
   min-height: 100px;
 }
@@ -1314,6 +1317,9 @@ body {
   border-top-width: calc(1px * calc(1 - var(--tw-divide-y-reverse)));
   border-bottom-width: calc(1px * var(--tw-divide-y-reverse));
 }
+.overflow-auto{
+  overflow: auto;
+}
 .overflow-hidden{
   overflow: hidden;
 }
@@ -1424,6 +1430,9 @@ body {
 }
 .border-blue-400\/20{
   border-color: rgb(96 165 250 / 0.2);
+}
+.border-white\/5{
+  border-color: rgb(255 255 255 / 0.05);
 }
 .bg-accent\/10{
   background-color: rgb(249 115 22 / 0.1);
@@ -1890,6 +1899,10 @@ body {
   border-width: 0px;
 }
 
+.even\:bg-white\/5:nth-child(even){
+  background-color: rgb(255 255 255 / 0.05);
+}
+
 .hover\:scale-110:hover{
   --tw-scale-x: 1.1;
   --tw-scale-y: 1.1;
@@ -1939,6 +1952,10 @@ body {
 
 .hover\:bg-white\/5:hover{
   background-color: rgb(255 255 255 / 0.05);
+}
+
+.hover\:bg-white\/10:hover{
+  background-color: rgb(255 255 255 / 0.1);
 }
 
 .hover\:text-accent:hover{
