@@ -387,7 +387,7 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
                     <div className="card">
                         <div className="p-4 border-b border-border flex items-center gap-2">
                             <TrendingUp className="h-5 w-5 text-muted-foreground" />
-                            <h2 className="font-semibold text-foreground">关联指标 (近1小时)</h2>
+                            <h2 className="font-semibold text-foreground">关联指标 (近4小时)</h2>
                         </div>
                         <div className="p-4 space-y-4">
                             {performance.length > 0 ? performance.slice(0, 5).map((item, i) => (
