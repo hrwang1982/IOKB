@@ -104,3 +104,18 @@ class PromptTemplate(Base):
     is_system = Column(Integer, default=0, comment="是否系统模板")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class QALog(Base):
+    """问答日志表"""
+    __tablename__ = "qa_logs"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    question = Column(Text, nullable=False, comment="用户问题")
+    answer = Column(Text, comment="生成的答案")
+    kb_ids = Column(JSON, comment="使用的知识库ID列表")
+    source_count = Column(Integer, default=0, comment="引用的来源数量")
+    response_time_ms = Column(Integer, comment="响应时间(毫秒)")
+    user_id = Column(Integer, ForeignKey("users.id"), comment="用户ID")
+    created_at = Column(DateTime, default=datetime.now)
+

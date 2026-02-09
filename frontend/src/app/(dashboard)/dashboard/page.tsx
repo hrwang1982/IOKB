@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import {
     AlertTriangle,
     ArrowDown,
@@ -10,75 +11,9 @@ import {
     Clock,
     Database,
     TrendingUp,
+    Loader2,
 } from 'lucide-react';
-
-// 统计卡片数据
-const stats = [
-    {
-        title: '待处理告警',
-        value: 12,
-        change: '+3',
-        trend: 'up',
-        icon: Bell,
-        color: 'error',
-    },
-    {
-        title: '知识库文档',
-        value: 1234,
-        change: '+28',
-        trend: 'up',
-        icon: BookOpen,
-        color: 'primary',
-    },
-    {
-        title: '配置项总数',
-        value: 567,
-        change: '+12',
-        trend: 'up',
-        icon: Database,
-        color: 'accent',
-    },
-    {
-        title: '今日问答',
-        value: 89,
-        change: '-5',
-        trend: 'down',
-        icon: TrendingUp,
-        color: 'success',
-    },
-];
-
-// 最近告警
-const recentAlerts = [
-    {
-        id: 'ALT001',
-        title: 'CPU使用率超过90%',
-        level: 'critical',
-        time: '5分钟前',
-        ci: 'server-prod-001',
-    },
-    {
-        id: 'ALT002',
-        title: '内存使用率告警',
-        level: 'warning',
-        time: '12分钟前',
-        ci: 'server-prod-003',
-    },
-    {
-        id: 'ALT003',
-        title: '磁盘空间不足',
-        level: 'warning',
-        time: '25分钟前',
-        ci: 'db-master-001',
-    },
-    {
-        id: 'ALT004',
-        title: '网络延迟异常',
-        level: 'info',
-        time: '1小时前',
-        ci: 'router-core-001',
-    },
-];
+import { getDashboardSummary, DashboardSummary, RecentAlert } from '@/lib/api';
 
 // 快捷入口
 const quickActions = [
@@ -88,6 +23,91 @@ const quickActions = [
 ];
 
 export default function DashboardPage() {
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [data, setData] = useState<DashboardSummary | null>(null);
+
+    useEffect(() => {
+        async function fetchData() {
+            try {
+                setLoading(true);
+                setError(null);
+                const summary = await getDashboardSummary();
+                setData(summary);
+            } catch (err) {
+                console.error('获取仪表盘数据失败:', err);
+                setError('加载数据失败，请稍后重试');
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchData();
+    }, []);
+
+    // 构建统计卡片数据
+    const stats = data ? [
+        {
+            title: '待处理告警',
+            value: data.pending_alerts,
+            change: data.pending_alerts_change,
+            trend: data.pending_alerts_change.startsWith('-') ? 'down' : 'up',
+            icon: Bell,
+            color: 'error',
+        },
+        {
+            title: '知识库文档',
+            value: data.document_count,
+            change: data.document_change,
+            trend: data.document_change.startsWith('-') ? 'down' : 'up',
+            icon: BookOpen,
+            color: 'primary',
+        },
+        {
+            title: '配置项总数',
+            value: data.ci_count,
+            change: data.ci_change,
+            trend: data.ci_change.startsWith('-') ? 'down' : 'up',
+            icon: Database,
+            color: 'accent',
+        },
+        {
+            title: '今日问答',
+            value: data.today_qa,
+            change: data.today_qa_change,
+            trend: data.today_qa_change.startsWith('-') ? 'down' : 'up',
+            icon: TrendingUp,
+            color: 'success',
+        },
+    ] : [];
+
+    const recentAlerts: RecentAlert[] = data?.recent_alerts || [];
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">加载中...</span>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <div className="text-center">
+                    <AlertTriangle className="h-12 w-12 text-error mx-auto mb-4" />
+                    <p className="text-error">{error}</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90"
+                    >
+                        重试
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* 页面标题 */}
@@ -151,38 +171,45 @@ export default function DashboardPage() {
                         </a>
                     </div>
                     <div className="divide-y divide-border">
-                        {recentAlerts.map((alert) => (
-                            <div
-                                key={alert.id}
-                                className="p-4 flex items-center gap-4 hover:bg-accent/5 transition-colors cursor-pointer"
-                            >
-                                <div
-                                    className={`p-2 rounded-lg ${alert.level === 'critical'
+                        {recentAlerts.length === 0 ? (
+                            <div className="p-8 text-center text-muted-foreground">
+                                暂无告警数据
+                            </div>
+                        ) : (
+                            recentAlerts.map((alert) => (
+                                <a
+                                    key={alert.id}
+                                    href={`/alerts/${alert.id}`}
+                                    className="p-4 flex items-center gap-4 hover:bg-accent/5 transition-colors cursor-pointer block"
+                                >
+                                    <div
+                                        className={`p-2 rounded-lg ${alert.level === 'critical'
                                             ? 'alert-critical'
                                             : alert.level === 'warning'
                                                 ? 'alert-warning'
                                                 : 'alert-info'
-                                        }`}
-                                >
-                                    {alert.level === 'critical' ? (
-                                        <AlertTriangle className="h-5 w-5" />
-                                    ) : alert.level === 'warning' ? (
-                                        <Clock className="h-5 w-5" />
-                                    ) : (
-                                        <CheckCircle className="h-5 w-5" />
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-foreground truncate">
-                                        {alert.title}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">{alert.ci}</p>
-                                </div>
-                                <span className="text-sm text-muted-foreground whitespace-nowrap">
-                                    {alert.time}
-                                </span>
-                            </div>
-                        ))}
+                                            }`}
+                                    >
+                                        {alert.level === 'critical' ? (
+                                            <AlertTriangle className="h-5 w-5" />
+                                        ) : alert.level === 'warning' ? (
+                                            <Clock className="h-5 w-5" />
+                                        ) : (
+                                            <CheckCircle className="h-5 w-5" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-foreground truncate">
+                                            {alert.title}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">{alert.ci}</p>
+                                    </div>
+                                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                                        {alert.time}
+                                    </span>
+                                </a>
+                            ))
+                        )}
                     </div>
                 </div>
 

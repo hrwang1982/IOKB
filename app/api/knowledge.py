@@ -768,7 +768,8 @@ async def search(
 @router.post("/qa", response_model=QAResponse, summary="知识问答")
 async def question_answer(
     request: QARequest,
-    token: str = Depends(oauth2_scheme)
+    token: str = Depends(oauth2_scheme),
+    session: AsyncSession = Depends(get_async_session)
 ):
     """
     基于知识库的智能问答
@@ -778,6 +779,10 @@ async def question_answer(
     3. 返回答案及引用来源
     """
     from app.core.rag import rag_service
+    from app.models.knowledge import QALog
+    import time
+    
+    start_time = time.time()
     
     try:
         kb_ids = request.kb_ids or []
@@ -786,6 +791,22 @@ async def question_answer(
             question=request.question,
             kb_ids=kb_ids,
         )
+        
+        response_time_ms = int((time.time() - start_time) * 1000)
+        
+        # 记录问答日志
+        try:
+            qa_log = QALog(
+                question=request.question,
+                answer=result.answer[:5000] if result.answer else "",  # 限制长度
+                kb_ids=kb_ids,
+                source_count=len(result.sources),
+                response_time_ms=response_time_ms,
+            )
+            session.add(qa_log)
+            await session.commit()
+        except Exception as log_error:
+            logger.warning(f"记录问答日志失败: {log_error}")
         
         return QAResponse(
             answer=result.answer,

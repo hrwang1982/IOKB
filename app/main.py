@@ -86,7 +86,7 @@ def create_app() -> FastAPI:
 
 def register_routers(app: FastAPI):
     """注册API路由"""
-    from app.api import knowledge, cmdb, alert, llm, auth, config, observability
+    from app.api import knowledge, cmdb, alert, llm, auth, config, observability, dashboard
     
     # API v1
     app.include_router(
@@ -123,6 +123,11 @@ def register_routers(app: FastAPI):
         observability.router,
         prefix="/api/v1/observability",
         tags=["可观测性"]
+    )
+    app.include_router(
+        dashboard.router,
+        prefix="/api/v1/dashboard",
+        tags=["仪表盘"]
     )
     
     # 健康检查
