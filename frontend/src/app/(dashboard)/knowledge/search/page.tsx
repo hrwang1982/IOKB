@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
     ArrowLeft,
     ChevronRight,
@@ -24,6 +25,8 @@ export default function SearchPage() {
     const [results, setResults] = useState<SearchResult[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    const initialSearchDone = useRef(false);
 
     // 加载知识库列表
     useEffect(() => {
@@ -39,6 +42,32 @@ export default function SearchPage() {
         }
         loadKnowledgeBases();
     }, []);
+
+    // 从 URL 参数读取搜索词并自动执行搜索
+    useEffect(() => {
+        const q = searchParams.get('q');
+        if (q && !loadingKbs && knowledgeBases.length > 0 && !initialSearchDone.current) {
+            initialSearchDone.current = true;
+            setQuery(q);
+            // 延迟执行以确保状态更新
+            setTimeout(async () => {
+                setLoading(true);
+                setError(null);
+                setHasSearched(true);
+                setResults([]);
+                try {
+                    const kbIds = knowledgeBases.map(kb => kb.id);
+                    const searchResults = await searchKnowledge(q, kbIds, 20);
+                    setResults(searchResults);
+                } catch (err) {
+                    console.error('Search failed:', err);
+                    setError(err instanceof Error ? err.message : '搜索失败');
+                } finally {
+                    setLoading(false);
+                }
+            }, 0);
+        }
+    }, [searchParams, loadingKbs, knowledgeBases]);
 
     const handleSearch = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();

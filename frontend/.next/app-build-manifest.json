@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/(dashboard)/admin/users/page": [
+    "/(dashboard)/alerts/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/admin/users/page.js"
+      "static/chunks/app/(dashboard)/alerts/[id]/page.js"
     ],
     "/(dashboard)/layout": [
       "static/chunks/webpack.js",
@@ -16,35 +16,40 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/(dashboard)/alerts/page": [
+    "/(dashboard)/cmdb/[id]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/alerts/page.js"
-    ],
-    "/(dashboard)/alerts/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/alerts/[id]/page.js"
-    ],
-    "/(dashboard)/dashboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/dashboard/page.js"
-    ],
-    "/(dashboard)/knowledge/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/knowledge/page.js"
+      "static/chunks/app/(dashboard)/cmdb/[id]/page.js"
     ],
     "/(dashboard)/cmdb/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(dashboard)/cmdb/page.js"
     ],
-    "/(dashboard)/cmdb/[id]/page": [
+    "/(dashboard)/alerts/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(dashboard)/cmdb/[id]/page.js"
+      "static/chunks/app/(dashboard)/alerts/page.js"
+    ],
+    "/(dashboard)/knowledge/search/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/knowledge/search/page.js"
+    ],
+    "/(dashboard)/knowledge/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/knowledge/page.js"
+    ],
+    "/(dashboard)/knowledge/qa/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/knowledge/qa/page.js"
+    ],
+    "/_not-found/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }

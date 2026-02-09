@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -32,6 +33,7 @@ import {
 import { toast } from 'sonner';
 
 export default function AlertDetailPage({ params }: { params: { id: string } }) {
+    const router = useRouter();
     const [loading, setLoading] = useState(true);
     const [analyzing, setAnalyzing] = useState(false);
 
@@ -415,7 +417,13 @@ export default function AlertDetailPage({ params }: { params: { id: string } }) 
 
                     {/* 快捷操作 */}
                     <div className="card p-4 space-y-2">
-                        <button className="btn-outline w-full justify-start gap-2">
+                        <button
+                            onClick={() => {
+                                const searchQuery = analysis?.analysis?.fault_summary || alert?.title || '';
+                                router.push(`/knowledge/search?q=${encodeURIComponent(searchQuery)}`);
+                            }}
+                            className="btn-outline w-full justify-start gap-2"
+                        >
                             <BookOpen className="h-4 w-4" />
                             搜索知识库
                         </button>
