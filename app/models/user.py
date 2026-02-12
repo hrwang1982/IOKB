@@ -36,10 +36,11 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)
     username = Column(String(50), unique=True, nullable=False, comment="用户名")
+    display_name = Column(String(100), comment="显示名称")
     email = Column(String(100), comment="邮箱")
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
     status = Column(String(20), default="active", comment="状态(active/disabled)")
-    last_login = Column(DateTime, comment="最后登录时间")
+    last_login_at = Column(DateTime, comment="最后登录时间")
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
@@ -59,6 +60,7 @@ class Role(Base):
     code = Column(String(50), nullable=False, comment="角色编码")
     description = Column(String(200), comment="角色描述")
     created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
     # 关系
     users = relationship("User", secondary="user_roles", back_populates="roles")
@@ -79,8 +81,9 @@ class Permission(Base):
     __tablename__ = "permissions"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    resource = Column(String(50), nullable=False, comment="资源标识")
-    action = Column(String(20), nullable=False, comment="操作类型")
+    code = Column(String(50), unique=True, nullable=False, comment="权限编码(如 kb:read)")
+    name = Column(String(50), nullable=False, comment="权限名称")
+    module = Column(String(50), default="", comment="所属模块")
     description = Column(String(200), comment="权限描述")
     
     # 关系

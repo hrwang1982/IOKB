@@ -1,9 +1,8 @@
 {
-  "/(dashboard)/knowledge/page": "app/(dashboard)/knowledge/page.js",
-  "/(dashboard)/knowledge/search/page": "app/(dashboard)/knowledge/search/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
-  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
   "/(dashboard)/alerts/page": "app/(dashboard)/alerts/page.js",
+  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
   "/(dashboard)/admin/users/page": "app/(dashboard)/admin/users/page.js",
-  "/(dashboard)/settings/page": "app/(dashboard)/settings/page.js"
+  "/(dashboard)/knowledge/[id]/page": "app/(dashboard)/knowledge/[id]/page.js",
+  "/(dashboard)/knowledge/[id]/doc/[docId]/page": "app/(dashboard)/knowledge/[id]/doc/[docId]/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js"
 }

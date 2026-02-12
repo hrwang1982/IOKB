@@ -217,13 +217,13 @@ export default function RolesPage() {
                                                 <label
                                                     key={perm}
                                                     className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${isSelected
-                                                            ? 'bg-primary/10 text-primary'
-                                                            : 'hover:bg-muted'
+                                                        ? 'bg-primary/10 text-primary'
+                                                        : 'hover:bg-muted'
                                                         }`}
                                                 >
                                                     <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected
-                                                            ? 'bg-primary border-primary'
-                                                            : 'border-border'
+                                                        ? 'bg-primary border-primary'
+                                                        : 'border-border'
                                                         }`}>
                                                         {isSelected && <Check className="h-3 w-3 text-white" />}
                                                     </div>

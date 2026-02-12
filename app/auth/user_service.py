@@ -25,7 +25,6 @@ class UserService:
         password: str,
         email: str = None,
         display_name: str = None,
-        department: str = None,
     ) -> User:
         """创建用户"""
         # 检查用户名是否已存在
@@ -47,7 +46,6 @@ class UserService:
             password_hash=hashed_password,
             email=email,
             display_name=display_name or username,
-            department=department,
             status="active",
         )
         db.add(user)
@@ -86,7 +84,6 @@ class UserService:
         self,
         db: AsyncSession,
         status: str = None,
-        department: str = None,
         keyword: str = None,
         offset: int = 0,
         limit: int = 20,
@@ -98,10 +95,6 @@ class UserService:
         if status:
             query = query.where(User.status == status)
             count_query = count_query.where(User.status == status)
-        
-        if department:
-            query = query.where(User.department == department)
-            count_query = count_query.where(User.department == department)
         
         if keyword:
             query = query.where(
@@ -135,7 +128,6 @@ class UserService:
         user_id: int,
         email: str = None,
         display_name: str = None,
-        department: str = None,
         status: str = None,
     ) -> Optional[User]:
         """更新用户"""
@@ -143,13 +135,11 @@ class UserService:
         if not user:
             return None
         
-        if email:
+        if email is not None:
             user.email = email
-        if display_name:
+        if display_name is not None:
             user.display_name = display_name
-        if department:
-            user.department = department
-        if status:
+        if status is not None:
             user.status = status
         
         user.updated_at = datetime.now()
