@@ -12,8 +12,9 @@ import {
     Settings,
     Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { getAlerts } from '@/lib/api';
 
 interface NavItem {
     title: string;
@@ -24,7 +25,7 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
     { title: '仪表盘', href: '/dashboard', icon: LayoutDashboard },
-    { title: '告警中心', href: '/alerts', icon: Bell, badge: 3 },
+    { title: '告警中心', href: '/alerts', icon: Bell },
     { title: '知识库', href: '/knowledge', icon: BookOpen },
     { title: 'CMDB', href: '/cmdb', icon: Database },
 ];
@@ -36,11 +37,31 @@ const adminNav: NavItem[] = [
 
 export function Sidebar() {
     const [collapsed, setCollapsed] = useState(false);
+    const [alertCount, setAlertCount] = useState(0);
     const pathname = usePathname();
+
+    useEffect(() => {
+        const fetchAlertCount = async () => {
+            try {
+                const res = await getAlerts({ status: 'open', size: 1 });
+                setAlertCount(res.total);
+            } catch (error) {
+                console.error('Failed to fetch alert count:', error);
+            }
+        };
+
+        fetchAlertCount();
+        // Poll every 30 seconds
+        const interval = setInterval(fetchAlertCount, 30000);
+        return () => clearInterval(interval);
+    }, []);
 
     const NavLink = ({ item }: { item: NavItem }) => {
         const isActive = pathname.startsWith(item.href);
         const Icon = item.icon;
+
+        // Dynamic badge for Alert Center
+        const badge = item.title === '告警中心' ? alertCount : item.badge;
 
         return (
             <Link
@@ -57,11 +78,11 @@ export function Sidebar() {
                 {!collapsed && (
                     <>
                         <span className="flex-1">{item.title}</span>
-                        {item.badge && (
+                        {badge && badge > 0 ? (
                             <span className="px-2 py-0.5 text-xs bg-error text-white rounded-full">
-                                {item.badge}
+                                {badge}
                             </span>
-                        )}
+                        ) : null}
                     </>
                 )}
             </Link>

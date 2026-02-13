@@ -1,8 +1,7 @@
 {
-  "/(dashboard)/cmdb/topology/page": "app/(dashboard)/cmdb/topology/page.js",
-  "/(dashboard)/dashboard/page": "app/(dashboard)/dashboard/page.js",
-  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
-  "/(dashboard)/alerts/[id]/page": "app/(dashboard)/alerts/[id]/page.js",
   "/(dashboard)/cmdb/[id]/page": "app/(dashboard)/cmdb/[id]/page.js",
+  "/(dashboard)/cmdb/topology/page": "app/(dashboard)/cmdb/topology/page.js",
+  "/(dashboard)/alerts/[id]/page": "app/(dashboard)/alerts/[id]/page.js",
+  "/(dashboard)/cmdb/page": "app/(dashboard)/cmdb/page.js",
   "/(dashboard)/alerts/page": "app/(dashboard)/alerts/page.js"
 }
