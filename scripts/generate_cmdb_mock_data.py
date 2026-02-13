@@ -10,7 +10,7 @@ sys.path.append(os.getcwd())
 from app.core.database import init_db, async_session_maker
 from app.core.cmdb.service import ci_service, relationship_service, ci_type_service
 from app.core.cmdb.influxdb import influxdb_service
-from app.core.cmdb.es_storage import log_storage_service
+from app.core.cmdb.es_storage import log_storage_service, alert_storage_service
 from app.models.alert import Alert, AlertAnalysis
 from app.models.cmdb import CI
 from loguru import logger
@@ -278,6 +278,38 @@ async def generate_alerts(db, cis):
             
     await db.commit()
 
+    # Sync to Elasticsearch (for Frontend Display)
+    # Re-query all open alerts just created/existed to ensure ES has them
+    # For simplicity, just push the ones we likely created or all recent ones.
+    # Here we just iterate what we might have created above.
+    
+    # We can fetch all alerts from DB for the involved CIs and sync them.
+    
+    all_alerts = await db.execute(select(Alert))
+    for alert in all_alerts.scalars().all():
+        # Only sync recent ones or all? Sync all to be safe for this mock script.
+        alert_data = {
+            "alert_id": alert.alert_id,
+            "ci_identifier": "", # Need to fetch CI identifier
+            "ci_id": alert.ci_id,
+            "level": alert.level,
+            "title": alert.title,
+            "content": alert.content,
+            "status": alert.status,
+            "source": alert.source,
+            "alert_time": alert.alert_time.isoformat(),
+            "created_at": alert.created_at.isoformat() if alert.created_at else datetime.now().isoformat()
+        }
+        
+        # Fetch CI Identifier
+        ci = await db.get(CI, alert.ci_id)
+        if ci:
+            alert_data["ci_identifier"] = ci.identifier
+            
+        await alert_storage_service.save_alert(alert_data)
+        
+    logger.info("Synced alerts to Elasticsearch.")
+
 
 async def generate_logs(cis):
     """Generate mock logs for CIs"""
@@ -367,6 +399,7 @@ async def main():
     
     # Ensure ES indices exist
     await log_storage_service.init_index()
+    await alert_storage_service.init_index()
     
     async with async_session_maker() as db:
         # 1. Create CIs
@@ -386,6 +419,7 @@ async def main():
 
     # Close ES client
     await log_storage_service.close()
+    await alert_storage_service.close()
     
     logger.info("Data Generation Completed!")
 
