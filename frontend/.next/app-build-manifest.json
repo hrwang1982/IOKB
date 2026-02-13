@@ -70,6 +70,16 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/(dashboard)/knowledge/[id]/doc/[docId]/page.js"
+    ],
+    "/(dashboard)/cmdb/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/cmdb/[id]/page.js"
+    ],
+    "/(dashboard)/cmdb/topology/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(dashboard)/cmdb/topology/page.js"
     ]
   }
 }
