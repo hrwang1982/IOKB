@@ -30,6 +30,20 @@ services:
       - ./config:/app/config # 添加这行：挂载配置目录
     restart: unless-stopped
 
+  # Frontend Application
+  skb-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
+
   # MySQL 数据库
   mysql:
     image: mysql:8.0

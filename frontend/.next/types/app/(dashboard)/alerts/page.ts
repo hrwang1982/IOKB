@@ -1,4 +1,4 @@
-// File: /Users/admin/Desktop/澜舟/python/skb/frontend/src/app/(dashboard)/alerts/page.tsx
+// File: /app/src/app/(dashboard)/alerts/page.tsx
 import * as entry from '../../../../../src/app/(dashboard)/alerts/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
