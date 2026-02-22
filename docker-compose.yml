@@ -42,6 +42,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
+      - API_URL=http://skb-api:8000
     restart: unless-stopped
 
   # MySQL 数据库
